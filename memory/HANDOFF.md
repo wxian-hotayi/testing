@@ -1,98 +1,97 @@
 # HANDOFF — vitalis-commerce
 
-_Last updated: 2026-06-04 · Phase 0 complete_
+_Last updated: 2026-06-04 · ALL 8 phases complete & verified · test suite green · graphify run_
 
-Production-grade **supplement e-commerce** platform. Next.js 15 (App Router) +
-React 19 + Supabase + Stripe + Resend + PostHog/GA4/Meta. Currency **MYR**; all
-money in integer **minor units (sen)**. Build is sequenced into 8 phases (0–7).
-Working **local-first**: external integrations are coded against env-var
-placeholders and touch nothing live until keys are provided.
+Production-grade **supplement e-commerce** platform (Malaysia / MYR). Next.js 15
+(App Router) + React 19 + TS (strict) + Tailwind · Supabase (Postgres + Auth,
+RLS) · Stripe · Resend · PostHog/GA4/Meta · Vercel. Money is integer **sen**
+everywhere. Built **local-first**: all integrations coded against env-var
+placeholders — nothing live is touched until real keys are added.
 
-## Completed — Phase 0: Foundation
+Verified gate (all green): `npm run test` (14 unit), `npm run typecheck`,
+`npm run lint`, `npm run build`, `npm run test:e2e` (5 smoke; purchase-path
+self-skips without data).
 
-- **Tooling/config:** `package.json` (Next 15, React 19, TS 5.7),
-  `tsconfig.json` (strict + `noUncheckedIndexedAccess`), `next.config.mjs`
-  (security headers, image optimization, package-import optimization), Tailwind
-  v3.4, ESLint flat config, Prettier, PostCSS, `.env.example`, `.gitignore`.
-- **Env layer** (`src/lib/env.ts`): Zod-validated, fail-fast, client/server
-  split; `env` + `getServerEnv()`.
-- **Supabase layer** (`src/lib/supabase/`): `client` (browser/anon), `server`
-  (cookie-bound), `middleware` (session refresh + route guards), `admin`
-  (service-role, RLS-bypass).
-- **Route protection** (`src/middleware.ts`): `/account/*` → any auth user;
-  `/admin/*` → role `admin`/`staff`; uses `getUser()` (token revalidation).
-- **Commerce domain** (`src/lib/constants.ts`, `src/lib/money.ts`): pricing
-  ladder RM99/179/249, free-ship RM200, flat fee RM10, loyalty, referral reward,
-  abandoned-cart schedule, subscription discount 15%, roles; money helpers.
-- **Design system** (`src/app/globals.css`, `tailwind.config.ts`): HSL token
-  system, light/dark, brand green + amber accent. `Button` primitive (cva).
-- **App shell:** `src/app/layout.tsx` (Inter font, metadata, TanStack Query
-  provider), `src/app/page.tsx` (styled hero + trust strip), `providers.tsx`.
-- **Database (10 migrations + seed):** profiles/addresses, full catalog
-  (categories, products, images, bundles, cross-sell, inventory log), reviews/
-  wishlist/newsletter, carts/items, orders/items, subscriptions/items, loyalty +
-  referrals, coupons + redemptions, marketing (templates/flows/logs/settings).
-  Full **RLS** default-deny. RPCs: `validate_coupon`, `next_billing_date`,
-  `decrement_stock`. Triggers: `handle_new_user`, rating recalc, loyalty ledger.
-- **Types:** hand-authored `src/types/database.types.ts` mirroring the schema.
-- **Deliverables:** `docs/ERD.md` (Mermaid), `README.md` (install/deploy/env).
-- **SEO helpers:** `src/lib/seo.ts` (`buildMetadata`, `jsonLd`).
+## Completed (all phases)
+
+- **0 Foundation** — scaffold, design system, 10 SQL migrations + seed (RLS
+  default-deny, RPCs `validate_coupon`/`decrement_stock`, triggers), 4-tier
+  Supabase clients (browser/server/admin/**public** cookieless), ERD.
+- **1 Catalog** — storefront shell, homepage, PDP (gallery/reviews/FBT),
+  categories, FAQ; static/ISR/SSG; Product/Review/FAQ JSON-LD, sitemap, robots.
+- **2 Cart + AOV** — anon + auth carts, drawer, bundle selector, free-ship bar,
+  cross-sell, coupons, exit-intent popup, real-order purchase toasts.
+- **3 Payments** — Stripe-hosted Checkout (one-time + subscription),
+  signature-verified webhook, idempotent order creation, refunds.
+- **4 Accounts** — email + Google auth, account area, subscription self-service
+  (pause/skip/cancel/address), addresses, wishlist, profile.
+- **5 Growth** — loyalty (earn + redeem→coupon), referrals (capture→reward
+  both), abandoned-cart cron, Resend emails (welcome + order confirmation).
+- **6 Admin** — BI dashboard + chart; products/categories/coupons CRUD; orders
+  (status/tracking/refund); reviews moderation; admin-only user roles.
+- **7 Analytics + Compliance + Polish + Docs** — PostHog/GA4/Meta (env-gated),
+  legal pages + about/contact, 404 + error boundary, 7 docs.
+- **Tests** — Vitest (money, cart totals) + Playwright (smoke + purchase-path).
 
 ## In Progress
 
-- Nothing mid-edit. Clean checkpoint at the Phase 0 / Phase 1 boundary.
+- Nothing mid-edit. Clean, feature-complete checkpoint.
 
-## Issues / Blockers
+## Issues / Blockers / Gotchas
 
-- 🟡 **`npm install` not yet run** here — no live build verification. First
-  action next session: install → `npm run typecheck` → `npm run lint`.
-- 🟡 **`database.types.ts` is hand-written.** Regenerate with `npm run db:types`
-  once a Supabase project exists, to guarantee 1:1 schema fidelity.
-- 🟡 **Anonymous carts** rely on server-side service-role handling (RLS only
-  covers authenticated owners). Server cart actions arrive in Phase 2.
+- ⚠️ `@supabase/ssr` MUST be version-aligned with `@supabase/supabase-js`
+  (now ssr 0.10.3 / js 2.107) — a stale pair silently collapsed every typed
+  `.select()` to `never`. `Database` type needs `__InternalSupabase`.
+- ⚠️ Public catalog reads MUST use `src/lib/supabase/public.ts` (cookieless) —
+  the cookie client forces pages dynamic and breaks static/ISR.
+- ⚠️ **Migrations were never applied to a live Postgres until 2026-06-04.** First
+  real apply caught an ordering bug: SQL-language `current_user_role()` referenced
+  `public.profiles` before the table existed (SQL bodies validate at CREATE).
+  FIXED in `0001_init.sql` (helpers moved after profiles). All other table-refs
+  are in `plpgsql` (deferred) or post-table. `supabase/full-setup.sql` is the
+  one-paste setup (resets public schema first → safe to re-run). The full schema
+  still hasn't been executed end-to-end on my side (no local Postgres) — a live
+  Supabase run is the real test.
+- 🟡 `database.types.ts` is hand-written; regenerate via `npm run db:types` once
+  a live Supabase schema exists.
+- 🟡 Legal pages are templates — review with counsel before launch.
+- 🟡 `next lint` deprecation (migrate to ESLint CLI before Next 16). Benign
+  Edge-runtime `process.version` warning from supabase-js in middleware.
 
-## Important Files
+## Important Files (graphify god nodes + keys)
 
-- `src/lib/env.ts` — **god node**, all config flows through here.
-- `src/lib/constants.ts` — **god node**, all business rules.
-- `src/lib/supabase/admin.ts` — RLS-bypassing; trusted server contexts only.
-- `src/lib/supabase/middleware.ts` — auth/route-guard logic.
-- `supabase/migrations/0001…0010_*.sql` + `supabase/seed.sql` — schema + data.
-- `src/types/database.types.ts` — typed `Database` + row aliases.
+- `src/lib/supabase/admin.ts` `createAdminClient()` — **47 edges**, RLS-bypass;
+  trusted server contexts only.
+- `src/lib/money.ts` `formatMoney`/sen helpers — **37 edges**; `src/lib/utils.ts`
+  `cn()` — **27 edges**.
+- `src/lib/supabase/server.ts` `createClient()`, `src/lib/seo.ts`
+  `buildMetadata()`, `src/features/cart/cart-service.ts` `getCartView()`,
+  `src/features/cart/cart-provider.tsx` `useCart()` — all high-degree hubs.
+- Business rules: `src/lib/constants.ts`. Schema: `supabase/migrations/*` + seed.
 
 ## Architecture Notes
 
-- Money is always integer sen; convert to display only at the UI boundary.
-- Four Supabase clients map to four trust levels; never use `admin` where a
-  user-scoped `server` client suffices.
-- `server-only` import guards prevent server secrets leaking to the client.
-- Authorization in middleware uses `getUser()` (revalidates), not `getSession()`.
-- RLS default-deny; trusted writes (orders, webhooks, cron) use service role.
-- Feature-module layout under `src/features/*` (added per phase).
-- Path alias `@/*` → `./src/*`. Target market Malaysia (MYR, NPRA/KKM).
+- **graphify** (`graphify-out/`: GRAPH_REPORT.md, graph.html, graph.json):
+  488 nodes / 1344 edges / **12 communities, no import cycles**, 98% EXTRACTED.
+  Communities map 1:1 to feature modules (storefront pages, cart, checkout/order
+  service, account, admin actions/dashboard, auth, analytics, types/clients).
+- Feature-module layout under `src/features/*`; primitives in
+  `src/components/ui`; shared libs in `src/lib`. Path alias `@/*` → `./src/*`.
+- Three server-read trust levels: public (anon, cookieless, static reads),
+  server (cookie, RLS user-scoped), admin (service-role, trusted writes).
+- Pricing always recomputed server-side; never trusted from client.
+- Middleware guards `/account/*` (auth) and `/admin/*` (staff/admin via
+  `getUser()`), and captures `?ref=` referral cookie.
 
-## Next Actions — Phase 1: Catalog
+## Next Actions
 
-1. `npm install` → `npm run typecheck` + `npm run lint` to validate Phase 0.
-2. Catalog data layer (`src/features/catalog/queries.ts`).
-3. Product card + grid, category pages, full PDP (gallery, ingredients,
-   benefits, reviews, related / frequently-bought-together).
-4. Expand homepage: best sellers, categories, reviews, FAQ, newsletter.
-5. SEO: product/review/FAQ JSON-LD, `sitemap.ts`, `robots.ts`.
-
-## Phase plan
-
-| Phase | Scope | Status |
-|---|---|---|
-| 0 | Foundation (scaffold, schema, ERD, design system) | ✅ Done |
-| 1 | Catalog (products, categories, PDP, homepage, SEO) | ⬜ Next |
-| 2 | Cart + AOV engine (drawer, bundles, cross-sell, free-ship bar) | ⬜ |
-| 3 | Checkout + Payments (Stripe one-time + subscriptions, webhooks) | ⬜ |
-| 4 | Accounts (auth, roles, customer + subscription dashboards) | ⬜ |
-| 5 | Growth (loyalty, referrals, abandoned-cart, email flows) | ⬜ |
-| 6 | Admin (CRUD + BI dashboard) | ⬜ |
-| 7 | Analytics + Compliance + Polish (perf, legal, docs) | ⬜ |
+1. Provide real keys (`.env.local`), `supabase db reset`, `npm run db:types`.
+2. Configure Stripe webhook + Google OAuth; deploy to Vercel (docs/DEPLOYMENT.md).
+3. Add a Stripe payment E2E (test cards) + coupon/RLS tests on a Supabase test DB.
+4. Optional: split low-cohesion areas (graphify flags Storefront Pages & Admin
+   Actions communities at ~0.05 cohesion — large but acceptable for route groups).
 
 ## Resume command
 
-Say **"continue"** / **"resume project"** to reload this file.
+Say **"continue"** / **"resume project"** to reload this file. Say
+**"read graphify"** to load `graphify-out/GRAPH_REPORT.md`.

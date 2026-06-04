@@ -55,6 +55,17 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Capture referral code (?ref=CODE) into a cookie for later attribution.
+  const ref = request.nextUrl.searchParams.get('ref');
+  if (ref) {
+    response.cookies.set('vitalis_ref', ref, {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  }
+
   if (isAdmin && user) {
     const { data: profile } = await supabase
       .from('profiles')

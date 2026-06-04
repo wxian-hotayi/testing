@@ -99,6 +99,18 @@ The full schema lives in `supabase/migrations/` and is documented in
    secret into `STRIPE_WEBHOOK_SECRET` (Phase 3).
 6. Deploy. Vercel auto-detects Next.js.
 
+## Documentation
+
+| Doc | Contents |
+|---|---|
+| [docs/ERD.md](docs/ERD.md) | Database schema + entity relationship diagram |
+| [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) | Every env var, where to get it |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Vercel + Supabase + Stripe + Resend setup |
+| [docs/TESTING.md](docs/TESTING.md) | Static checks + manual E2E + admin setup |
+| [docs/API.md](docs/API.md) | Server actions, route handlers, RPCs |
+| [docs/ADMIN_MANUAL.md](docs/ADMIN_MANUAL.md) | Operating the admin panel |
+| [docs/CUSTOMER_MANUAL.md](docs/CUSTOMER_MANUAL.md) | Customer-facing guide |
+
 ## Compliance
 
 This is a supplement store. All product copy uses structure/function language

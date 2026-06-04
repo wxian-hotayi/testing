@@ -35,37 +35,9 @@ begin
 end;
 $$;
 
--- Role lookup used by RLS policies. SECURITY DEFINER avoids RLS recursion when
--- a policy on `profiles` itself needs to read the caller's role.
-create or replace function current_user_role()
-returns user_role
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select role from public.profiles where id = auth.uid();
-$$;
-
-create or replace function is_staff()
-returns boolean
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select coalesce(current_user_role() in ('staff', 'admin'), false);
-$$;
-
-create or replace function is_admin()
-returns boolean
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select coalesce(current_user_role() = 'admin', false);
-$$;
+-- NOTE: the role-lookup helpers (current_user_role/is_staff/is_admin) are
+-- defined AFTER the profiles table below — `language sql` bodies are validated
+-- at CREATE time, so they cannot reference profiles before it exists.
 
 -- --- profiles ----------------------------------------------------------------
 -- 1:1 with auth.users. Holds role + storefront profile data.
@@ -116,6 +88,39 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
+
+-- --- Role-lookup helpers (defined AFTER profiles so SQL bodies validate) -----
+-- SECURITY DEFINER avoids RLS recursion when a policy on `profiles` itself
+-- needs to read the caller's role.
+create or replace function current_user_role()
+returns user_role
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select role from public.profiles where id = auth.uid();
+$$;
+
+create or replace function is_staff()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce(current_user_role() in ('staff', 'admin'), false);
+$$;
+
+create or replace function is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce(current_user_role() = 'admin', false);
+$$;
 
 -- --- addresses ---------------------------------------------------------------
 create table public.addresses (

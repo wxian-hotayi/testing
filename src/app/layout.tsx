@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
+import { AnalyticsProvider } from '@/features/analytics/analytics-provider';
+import { AnalyticsScripts } from '@/features/analytics/scripts';
 import { buildMetadata } from '@/lib/seo';
 
 const inter = Inter({
@@ -27,7 +29,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${displayVariable}`}>
       <body className="min-h-dvh font-sans">
-        <Providers>{children}</Providers>
+        <Providers>
+          <AnalyticsProvider>{children}</AnalyticsProvider>
+        </Providers>
+        <AnalyticsScripts />
       </body>
     </html>
   );

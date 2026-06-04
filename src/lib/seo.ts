@@ -27,6 +27,7 @@ export function buildMetadata(opts: {
   const fullTitle = title ? `${title} | ${SITE.name}` : `${SITE.name} — ${SITE.tagline}`;
 
   return {
+    metadataBase: new URL(env.NEXT_PUBLIC_SITE_URL),
     title: fullTitle,
     description,
     alternates: { canonical: url },
