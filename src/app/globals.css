@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens. Colors are HSL channels (no hsl() wrapper) so Tailwind can
+ * compose them with opacity modifiers, e.g. `bg-primary/80`.
+ */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 160 14% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 160 14% 12%;
+
+    /* Brand: trustworthy supplement-green + warm amber accent. */
+    --primary: 158 64% 30%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 152 30% 95%;
+    --secondary-foreground: 158 64% 22%;
+
+    --muted: 160 12% 96%;
+    --muted-foreground: 160 8% 42%;
+
+    --accent: 32 95% 50%;
+    --accent-foreground: 30 60% 12%;
+
+    --success: 142 72% 35%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 160 12% 88%;
+    --input: 160 12% 88%;
+    --ring: 158 64% 30%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 160 18% 8%;
+    --foreground: 0 0% 98%;
+    --card: 160 16% 11%;
+    --card-foreground: 0 0% 98%;
+    --primary: 158 64% 42%;
+    --primary-foreground: 160 18% 8%;
+    --secondary: 160 14% 16%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 160 14% 16%;
+    --muted-foreground: 160 8% 64%;
+    --accent: 32 95% 55%;
+    --accent-foreground: 30 60% 12%;
+    --border: 160 14% 20%;
+    --input: 160 14% 20%;
+    --ring: 158 64% 42%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
+  }
+  /* Respect reduced-motion preferences. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

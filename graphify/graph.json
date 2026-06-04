@@ -1,0 +1,49 @@
+{
+  "$schema": "graphify/1.0",
+  "project": "vitalis-commerce",
+  "generatedBy": "claude-code (direct file analysis)",
+  "generatedAt": "2026-06-04",
+  "summary": {
+    "stack": ["Next.js 15 (App Router)", "React 19", "TypeScript 5.7", "Supabase (SSR auth + RLS)", "Stripe", "Resend", "PostHog", "TanStack Query", "Tailwind CSS 3.4", "Zod"],
+    "domain": "Supplement e-commerce storefront (MYR, amounts in minor units / sen)",
+    "fileCount": 11,
+    "stage": "scaffolding — infrastructure/libs present, no UI routes or DB types yet"
+  },
+  "nodes": [
+    { "id": "src/middleware.ts", "type": "edge-middleware", "role": "Next.js middleware entry; delegates to supabase session refresh + route guards", "exports": ["middleware", "config"] },
+    { "id": "src/lib/env.ts", "type": "lib", "role": "GOD NODE — Zod-validated env (client + server split); fail-fast config", "exports": ["env", "getServerEnv"], "godNode": true },
+    { "id": "src/lib/constants.ts", "type": "lib", "role": "GOD NODE — central business rules: currency, shipping, bundles, loyalty, subscriptions, roles", "exports": ["CURRENCY", "FREE_SHIPPING_THRESHOLD", "FLAT_SHIPPING_FEE", "DEFAULT_BUNDLE_TIERS", "LOYALTY_POINTS_PER_MINOR_UNIT", "LOYALTY_POINT_REDEMPTION_VALUE_SEN", "REFERRAL_REWARD_SEN", "ABANDONED_CART_STEPS", "USER_ROLES", "UserRole", "SUBSCRIPTION_INTERVALS", "SubscriptionInterval", "SUBSCRIPTION_DISCOUNT_PERCENT", "SITE"], "godNode": true },
+    { "id": "src/lib/money.ts", "type": "lib", "role": "Money helpers — format/convert minor units (sen)", "exports": ["formatMoney", "toMinor", "toMajor", "percentOff"] },
+    { "id": "src/lib/utils.ts", "type": "lib", "role": "cn() Tailwind class merge helper", "exports": ["cn"] },
+    { "id": "src/lib/supabase/client.ts", "type": "supabase-client", "role": "Browser Supabase client (anon key, RLS-governed)", "exports": ["createClient"] },
+    { "id": "src/lib/supabase/server.ts", "type": "supabase-client", "role": "Server Supabase client bound to request cookies (RLS as user)", "exports": ["createClient"] },
+    { "id": "src/lib/supabase/middleware.ts", "type": "supabase-client", "role": "Session refresh + /account & /admin route protection", "exports": ["updateSession"] },
+    { "id": "src/lib/supabase/admin.ts", "type": "supabase-client", "role": "Service-role client — BYPASSES RLS; webhooks/cron/admin only", "exports": ["createAdminClient"] },
+    { "id": "src/app/globals.css", "type": "style", "role": "Tailwind base + HSL design-token CSS variables (light/dark)", "exports": [] },
+    { "id": "src/types/database.types.ts", "type": "generated", "role": "Supabase-generated DB types — MISSING (run npm run db:types)", "exports": ["Database"], "missing": true }
+  ],
+  "edges": [
+    { "from": "src/middleware.ts", "to": "src/lib/supabase/middleware.ts", "kind": "import" },
+    { "from": "src/lib/supabase/middleware.ts", "to": "src/lib/env.ts", "kind": "import" },
+    { "from": "src/lib/supabase/middleware.ts", "to": "src/types/database.types.ts", "kind": "import-type", "broken": true },
+    { "from": "src/lib/supabase/client.ts", "to": "src/lib/env.ts", "kind": "import" },
+    { "from": "src/lib/supabase/client.ts", "to": "src/types/database.types.ts", "kind": "import-type", "broken": true },
+    { "from": "src/lib/supabase/server.ts", "to": "src/lib/env.ts", "kind": "import" },
+    { "from": "src/lib/supabase/server.ts", "to": "src/types/database.types.ts", "kind": "import-type", "broken": true },
+    { "from": "src/lib/supabase/admin.ts", "to": "src/lib/env.ts", "kind": "import" },
+    { "from": "src/lib/supabase/admin.ts", "to": "src/types/database.types.ts", "kind": "import-type", "broken": true },
+    { "from": "src/lib/money.ts", "to": "src/lib/constants.ts", "kind": "import" }
+  ],
+  "communities": [
+    { "name": "Supabase data/auth layer", "members": ["src/lib/supabase/client.ts", "src/lib/supabase/server.ts", "src/lib/supabase/middleware.ts", "src/lib/supabase/admin.ts", "src/middleware.ts"] },
+    { "name": "Commerce domain logic", "members": ["src/lib/constants.ts", "src/lib/money.ts"] },
+    { "name": "Cross-cutting infrastructure", "members": ["src/lib/env.ts", "src/lib/utils.ts"] },
+    { "name": "Presentation/design system", "members": ["src/app/globals.css"] }
+  ],
+  "godNodes": ["src/lib/env.ts", "src/lib/constants.ts"],
+  "issues": [
+    { "severity": "high", "node": "src/types/database.types.ts", "detail": "Imported by 4 modules but does not exist; `npm run typecheck` and `build` will fail until generated." },
+    { "severity": "high", "node": "src/app", "detail": "No layout.tsx or page.tsx — globals.css present but no App Router entry; app cannot render/build yet." },
+    { "severity": "medium", "node": "src/emails", "detail": "email:dev script + Resend dependency exist but no src/emails directory." }
+  ]
+}
