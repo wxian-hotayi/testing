@@ -120,11 +120,26 @@ Migration [0012_multitenant_scoping.sql](../supabase/migrations/0012_multitenant
 - Connect onboarding (Express/Standard); create Checkout sessions on the
   connected account; route webhooks per connected account; platform fee.
 
-### ⬜ MT-6 — Storefront subdomain routing (remove default fallback)
-- Resolve storefront strictly by subdomain/custom domain; drop the
-  `default`-store fallback in `getCurrentStore()`.
-- Per-store branding/theme (logo, `primary_color`, currency) applied at render.
-- 404 for unknown/suspended stores; custom-domain verification flow.
+### ✅ MT-6 — Storefront subdomain routing *(implemented, uncommitted)*
+- Strict storefront resolver `getStorefrontStore()` (React-cached) +
+  `resolveStorefront()` ([tenant/context.ts](../src/lib/tenant/context.ts)):
+  subdomain/custom-host → that active store (`matched`); root → default store
+  (`default`); positively-unknown host → **404** (`unknown`).
+- **Defensive**: if the tenancy schema isn't live yet or Supabase errors, it
+  returns `unavailable` and the storefront **degrades to the unscoped catalog**
+  (no 404) — so this can't break the pre-migration deployment.
+- Per-store **branding** in the header (name, logo, brand colour) via
+  `SiteHeader`; falls back to platform defaults.
+- `store_id` threaded into all storefront reads (home, /products,
+  /products/[slug], /categories/[slug], recent reviews).
+- **Rendering trade-off**: the storefront is now **dynamic** (resolves the tenant
+  from the Host). `generateStaticParams` removed from /products/[slug],
+  /categories/[slug], /legal/[slug]; the catalog query layer keeps the
+  `getCurrentStore` fallback for operator contexts.
+- **Deferred**: SSG-per-store (e.g. middleware path-rewrite to `/s/<slug>/…`) to
+  recover static performance; custom-domain verification flow; per-store
+  currency formatting (money helpers still assume MYR); root-as-marketing-site
+  (root currently serves the default store).
 
 ## Key decisions already baked in
 - **Money stays integer sen**, `currency` is per-store (`stores.currency`).

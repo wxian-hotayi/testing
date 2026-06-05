@@ -1,27 +1,19 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ProductGrid } from '@/features/catalog/components/product-grid';
-import {
-  getActiveProducts,
-  getCategoryBySlug,
-  getCategorySlugs,
-} from '@/features/catalog/queries';
+import { getActiveProducts, getCategoryBySlug } from '@/features/catalog/queries';
 import { buildMetadata } from '@/lib/seo';
+import { resolveStorefront } from '@/lib/tenant/context';
 
-export const revalidate = 300;
-
-export async function generateStaticParams() {
-  const slugs = await getCategorySlugs();
-  return slugs.map((slug) => ({ slug }));
-}
-
+// Rendered per store; the category is scoped to the resolved tenant.
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const category = await getCategoryBySlug(slug);
+  const { storeId } = await resolveStorefront();
+  const category = await getCategoryBySlug(slug, storeId);
   if (!category) return buildMetadata({ title: 'Category not found', noIndex: true });
   return buildMetadata({
     title: category.name,
@@ -36,9 +28,10 @@ export default async function CategoryPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const { storeId } = await resolveStorefront();
   const [category, products] = await Promise.all([
-    getCategoryBySlug(slug),
-    getActiveProducts({ categorySlug: slug }),
+    getCategoryBySlug(slug, storeId),
+    getActiveProducts({ categorySlug: slug, storeId }),
   ]);
   if (!category) notFound();
 

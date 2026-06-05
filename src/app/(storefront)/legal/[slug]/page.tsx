@@ -1,12 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { LEGAL_DOCS, LEGAL_SLUGS } from '@/lib/legal-content';
+import { LEGAL_DOCS } from '@/lib/legal-content';
 import { buildMetadata } from '@/lib/seo';
 
-export function generateStaticParams() {
-  return LEGAL_SLUGS.map((slug) => ({ slug }));
-}
-
+// Dynamic under the per-store storefront layout (MT-6); content is static data.
 export async function generateMetadata({
   params,
 }: {

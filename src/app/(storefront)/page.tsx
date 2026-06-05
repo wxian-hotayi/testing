@@ -14,13 +14,15 @@ import {
 import { SITE } from '@/lib/constants';
 import { FAQS } from '@/lib/faq';
 import { env } from '@/lib/env';
+import { resolveStorefront } from '@/lib/tenant/context';
 import { NewsletterForm } from '@/features/marketing/components/newsletter-form';
 
 export default async function HomePage() {
+  const { storeId } = await resolveStorefront();
   const [bestSellers, categories, reviews] = await Promise.all([
-    getBestSellers(4),
-    getCategories(),
-    getRecentReviews(3),
+    getBestSellers(4, storeId),
+    getCategories(storeId),
+    getRecentReviews(3, storeId),
   ]);
 
   const orgJsonLd = {

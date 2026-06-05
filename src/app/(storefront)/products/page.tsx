@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ProductGrid } from '@/features/catalog/components/product-grid';
 import { getActiveProducts } from '@/features/catalog/queries';
 import { buildMetadata } from '@/lib/seo';
+import { resolveStorefront } from '@/lib/tenant/context';
 
 export const metadata: Metadata = buildMetadata({
   title: 'All Products',
@@ -10,11 +11,10 @@ export const metadata: Metadata = buildMetadata({
   path: '/products',
 });
 
-// Re-fetch the catalog at most every 5 minutes (ISR) for fresh stock/pricing.
-export const revalidate = 300;
-
+// Rendered per store (resolves the tenant from the Host).
 export default async function ProductsPage() {
-  const products = await getActiveProducts();
+  const { storeId } = await resolveStorefront();
+  const products = await getActiveProducts({ storeId });
 
   return (
     <main className="container py-12">

@@ -1,6 +1,8 @@
 import 'server-only';
 
+import { cache } from 'react';
 import { headers } from 'next/headers';
+import { notFound } from 'next/navigation';
 import { createPublicClient } from '@/lib/supabase/public';
 import {
   STORE_SLUG_HEADER,
@@ -51,4 +53,84 @@ export async function getCurrentStore(): Promise<Store | null> {
 export async function getCurrentStoreId(): Promise<string | null> {
   const store = await getCurrentStore();
   return store?.id ?? null;
+}
+
+// --- Storefront resolution (MT-6) -------------------------------------------
+export type StorefrontResolution = 'matched' | 'default' | 'unknown' | 'unavailable';
+
+/**
+ * Resolve the store for a STOREFRONT request (strict, unlike getCurrentStore
+ * which falls back for operator contexts):
+ *   • subdomain/custom host matches an active store → 'matched'
+ *   • root/default host → the default store → 'default'
+ *   • subdomain/custom host with no matching active store → 'unknown' (→ 404)
+ *   • query failed (e.g. tenancy migrations not applied yet, Supabase down) →
+ *     'unavailable' — callers DEGRADE to the unscoped catalog rather than 404,
+ *     so the storefront keeps working before MT-1..2 are live.
+ *
+ * Cached per request so the layout and pages share one resolution. Reads
+ * headers() → opts the storefront into dynamic rendering.
+ */
+export const getStorefrontStore = cache(
+  async (): Promise<{ store: Store | null; resolution: StorefrontResolution }> => {
+    try {
+      const h = await headers();
+      const slug = h.get(STORE_SLUG_HEADER);
+      const customHost = h.get(STORE_HOST_HEADER);
+      const supabase = createPublicClient();
+
+      if (customHost) {
+        const { data, error } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('custom_domain', customHost)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (error) return { store: null, resolution: 'unavailable' };
+        return data
+          ? { store: data, resolution: 'matched' }
+          : { store: null, resolution: 'unknown' };
+      }
+
+      if (slug) {
+        const { data, error } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('slug', slug)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (error) return { store: null, resolution: 'unavailable' };
+        return data
+          ? { store: data, resolution: 'matched' }
+          : { store: null, resolution: 'unknown' };
+      }
+
+      // Root / default tenant.
+      const { data, error } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('slug', DEFAULT_STORE_SLUG)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (error || !data) return { store: null, resolution: 'unavailable' };
+      return { store: data, resolution: 'default' };
+    } catch (err) {
+      console.warn('[tenant] getStorefrontStore failed:', err);
+      return { store: null, resolution: 'unavailable' };
+    }
+  },
+);
+
+/**
+ * For storefront pages: 404 on a positively-unknown store, otherwise return the
+ * (possibly null) store and its id. `storeId` is undefined when unresolved, so
+ * catalog queries fall back to unscoped reads.
+ */
+export async function resolveStorefront(): Promise<{
+  store: Store | null;
+  storeId: string | undefined;
+}> {
+  const { store, resolution } = await getStorefrontStore();
+  if (resolution === 'unknown') notFound();
+  return { store, storeId: store?.id };
 }

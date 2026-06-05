@@ -130,15 +130,20 @@ export type RecentReviewVM = {
 };
 
 /** Recent approved reviews across all products, for homepage social proof. */
-export async function getRecentReviews(limit = 6): Promise<RecentReviewVM[]> {
+export async function getRecentReviews(
+  limit = 6,
+  storeId?: string,
+): Promise<RecentReviewVM[]> {
   try {
     const supabase = createPublicClient();
-    const { data: reviews, error } = await supabase
+    let reviewsQuery = supabase
       .from('reviews')
       .select('id, author_name, rating, title, body, product_id')
       .eq('status', 'approved')
       .order('created_at', { ascending: false })
       .limit(limit);
+    if (storeId) reviewsQuery = reviewsQuery.eq('store_id', storeId);
+    const { data: reviews, error } = await reviewsQuery;
     if (error) throw error;
     if (!reviews || reviews.length === 0) return [];
 

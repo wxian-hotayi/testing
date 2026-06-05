@@ -10,26 +10,22 @@ import { RatingStars } from '@/components/ui/rating-stars';
 import { Price } from '@/components/ui/price';
 import { Badge } from '@/components/ui/badge';
 import { JsonLd } from '@/components/seo/json-ld';
-import { getProductBySlug, getProductSlugs } from '@/features/catalog/queries';
+import { getProductBySlug } from '@/features/catalog/queries';
 import { buildMetadata } from '@/lib/seo';
 import { toMajor } from '@/lib/money';
 import { SITE } from '@/lib/constants';
 import { env } from '@/lib/env';
+import { resolveStorefront } from '@/lib/tenant/context';
 
-export const revalidate = 300;
-
-export async function generateStaticParams() {
-  const slugs = await getProductSlugs();
-  return slugs.map((slug) => ({ slug }));
-}
-
+// Rendered per store; the product is scoped to the resolved tenant.
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const { storeId } = await resolveStorefront();
+  const product = await getProductBySlug(slug, storeId);
   if (!product) return buildMetadata({ title: 'Product not found', noIndex: true });
   return buildMetadata({
     title: product.meta_title ?? product.name,
@@ -47,7 +43,8 @@ export default async function ProductPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const { storeId } = await resolveStorefront();
+  const product = await getProductBySlug(slug, storeId);
   if (!product) notFound();
 
   const benefits = Array.isArray(product.benefits)
