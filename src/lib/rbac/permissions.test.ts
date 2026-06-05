@@ -82,3 +82,65 @@ describe('resolveRoleKey', () => {
     ).toBe('customer');
   });
 });
+
+/**
+ * Regression: a legacy global `profiles.role='admin'` must NOT grant admin on a
+ * non-default tenant store (the cross-tenant privilege leak fixed in
+ * "restrict legacy global-admin fallback to the default store").
+ */
+describe('tenant isolation: global role does not leak across stores', () => {
+  it('global admin is NOT admin of a non-default store', () => {
+    expect(
+      resolveRoleKey({
+        isPlatformAdmin: false,
+        storeRole: null,
+        profileRole: 'admin',
+        isDefaultStore: false,
+      }),
+    ).toBe('customer');
+  });
+
+  it('global staff is NOT manager of a non-default store', () => {
+    expect(
+      resolveRoleKey({
+        isPlatformAdmin: false,
+        storeRole: null,
+        profileRole: 'staff',
+        isDefaultStore: false,
+      }),
+    ).toBe('customer');
+  });
+
+  it('the same global admin still has admin on the default store (legacy path)', () => {
+    expect(
+      resolveRoleKey({
+        isPlatformAdmin: false,
+        storeRole: null,
+        profileRole: 'admin',
+        isDefaultStore: true,
+      }),
+    ).toBe('admin');
+  });
+
+  it('platform admin still spans every store regardless', () => {
+    expect(
+      resolveRoleKey({
+        isPlatformAdmin: true,
+        storeRole: null,
+        profileRole: 'customer',
+        isDefaultStore: false,
+      }),
+    ).toBe('super_admin');
+  });
+
+  it('explicit store membership still grants its role on a non-default store', () => {
+    expect(
+      resolveRoleKey({
+        isPlatformAdmin: false,
+        storeRole: 'support',
+        profileRole: 'admin', // global admin is irrelevant; membership decides
+        isDefaultStore: false,
+      }),
+    ).toBe('support');
+  });
+});
