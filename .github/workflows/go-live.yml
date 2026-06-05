@@ -1,0 +1,35 @@
+name: go-live-preflight
+
+# CI safety gate. Runs the offline GO-LIVE preflight (scripts/go-live-check.mjs)
+# on every push/PR in `ci` mode: Gates 0–7 (code integrity + schema/structure +
+# RBAC/tenancy/payments/E2E presence + security baseline). Production secrets are
+# NOT required here — env-var gates are warnings in `ci` mode. The PRODUCTION
+# deploy gate runs the same script with GO_LIVE_TARGET=production and real
+# secrets, before the deploy step (see docs/GO_LIVE_CHECKLIST.md).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      GO_LIVE_TARGET: ci
+      # Placeholder PUBLIC env so `next build` passes its env validation. These
+      # are NOT secrets — real values are injected only in the production gate.
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: GO-LIVE preflight (Gates 0–7)
+        run: npm run go-live-check

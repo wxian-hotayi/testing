@@ -20,7 +20,10 @@
     "email:dev": "email dev --dir src/emails",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "go-live-check": "node scripts/go-live-check.mjs",
+    "predeploy": "npm run go-live-check",
+    "deploy": "echo \"Wire to your platform deploy here; npm runs predeploy (go-live-check) first.\""
   },
   "dependencies": {
     "@stripe/stripe-js": "^5.5.0",
