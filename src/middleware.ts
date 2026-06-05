@@ -1,7 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
+import { rateLimitRequest } from '@/lib/rate-limit/middleware';
 
 export async function middleware(request: NextRequest) {
+  // Per-IP rate limiting on sensitive paths (auth + API), before auth refresh.
+  const limited = rateLimitRequest(request);
+  if (limited) return limited;
   return updateSession(request);
 }
 

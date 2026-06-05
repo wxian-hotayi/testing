@@ -47,7 +47,11 @@ each is a hard manual gate (see [SETUP_AND_VALIDATION.md](./SETUP_AND_VALIDATION
       live DB.
 - [ ] **Stripe test-mode flows pass**: Connect onboarding → order → application
       fee → refund → webhook delivery.
-- [ ] **Rate limiting implemented** (Gate 7 only warns today — it is **absent**).
+- [x] **Rate limiting implemented** — per-IP fixed-window limiter on auth + API
+      paths ([src/lib/rate-limit](../src/lib/rate-limit), wired in
+      [middleware.ts](../src/middleware.ts)). ⚠️ in-process / **per-instance**;
+      for a serverless fleet swap the store for a shared backend (Upstash Redis /
+      Vercel KV) behind the same `checkRateLimit` shape.
 - [ ] **Storefront performance** measured (Lighthouse ≥ 90) — note MT-6 made the
       storefront dynamic; a caching/SSG strategy is likely required.
 - [ ] **DR drill**: backup → restore + deploy rollback, RPO/RTO recorded.
