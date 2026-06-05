@@ -1,6 +1,12 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { env } from '@/lib/env';
+import {
+  resolveTenantFromHost,
+  rootDomainFromSiteUrl,
+  STORE_SLUG_HEADER,
+  STORE_HOST_HEADER,
+} from '@/lib/tenant/resolve';
 import type { Database } from '@/types/database.types';
 
 // See server.ts — explicit annotation works around union-type inference loss.
@@ -15,7 +21,24 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
  *   /admin/*    → users with role 'admin' or 'staff'
  */
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  // --- Tenant resolution from Host -------------------------------------------
+  // Strip any inbound store headers (anti-spoofing) and set them from the
+  // trusted Host so Server Components can resolve the current store.
+  const tenant = resolveTenantFromHost(
+    request.headers.get('host'),
+    rootDomainFromSiteUrl(env.NEXT_PUBLIC_SITE_URL),
+  );
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(STORE_SLUG_HEADER);
+  requestHeaders.delete(STORE_HOST_HEADER);
+  if (tenant.kind === 'subdomain') {
+    requestHeaders.set(STORE_SLUG_HEADER, tenant.slug);
+  } else if (tenant.kind === 'custom') {
+    requestHeaders.set(STORE_HOST_HEADER, tenant.host);
+  }
+  const nextOptions = { request: { headers: requestHeaders } };
+
+  let response = NextResponse.next(nextOptions);
 
   const supabase = createServerClient<Database>(
     env.NEXT_PUBLIC_SUPABASE_URL,
@@ -29,7 +52,7 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value),
           );
-          response = NextResponse.next({ request });
+          response = NextResponse.next(nextOptions);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );
@@ -67,13 +90,32 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isAdmin && user) {
+    // Coarse gate: allow any operator into /admin. Fine-grained permission
+    // checks happen in the admin layout, nav, and each server action
+    // (see src/lib/rbac). An operator is a platform admin, a legacy
+    // staff/admin profile, or a member of any store.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, is_platform_admin')
       .eq('id', user.id)
       .single();
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'staff')) {
+    let allowed =
+      profile?.is_platform_admin === true ||
+      profile?.role === 'admin' ||
+      profile?.role === 'staff';
+
+    if (!allowed) {
+      const { data: membership } = await supabase
+        .from('store_members')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      allowed = !!membership;
+    }
+
+    if (!allowed) {
       const url = request.nextUrl.clone();
       url.pathname = '/';
       return NextResponse.redirect(url);

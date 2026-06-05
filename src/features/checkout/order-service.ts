@@ -43,7 +43,16 @@ export async function finalizeOrderFromSession(
     is_subscription: boolean;
     subscription_interval: SubscriptionInterval | null;
   }[] = [];
+  // The order (and its children) inherit the cart's store — the webhook has no
+  // Host context to resolve a tenant from, so store_id flows from the cart.
+  let storeId: string | null = null;
   if (cartId) {
+    const { data: cart } = await admin
+      .from('carts')
+      .select('store_id')
+      .eq('id', cartId)
+      .maybeSingle();
+    storeId = cart?.store_id ?? null;
     const { data } = await admin
       .from('cart_items')
       .select('product_id, bundle_id, quantity, unit_price_sen, is_subscription, subscription_interval')
@@ -73,13 +82,14 @@ export async function finalizeOrderFromSession(
   // Create a subscription record first (so the order can reference it).
   let subscriptionId: string | null = null;
   if (session.mode === 'subscription' && userId) {
-    subscriptionId = await createSubscription(session, userId, items, productById);
+    subscriptionId = await createSubscription(session, userId, items, productById, storeId);
   }
 
   // Insert the order.
   const { data: order, error: orderErr } = await admin
     .from('orders')
     .insert({
+      ...(storeId ? { store_id: storeId } : {}),
       user_id: userId || null,
       email: session.customer_details?.email ?? 'unknown@example.com',
       status: 'paid',
@@ -115,6 +125,7 @@ export async function finalizeOrderFromSession(
       items.map((i) => {
         const p = productById.get(i.product_id);
         return {
+          ...(storeId ? { store_id: storeId } : {}),
           order_id: order.id,
           product_id: i.product_id,
           bundle_id: i.bundle_id,
@@ -139,12 +150,13 @@ export async function finalizeOrderFromSession(
 
   // Coupon redemption.
   if (couponCode) {
-    await recordCouponRedemption(couponCode, userId, order.id, discountSen);
+    await recordCouponRedemption(couponCode, userId, order.id, discountSen, storeId);
   }
 
-  // Loyalty points earned (the ledger trigger maintains the balance).
+  // Loyalty points earned (the ledger trigger maintains the per-store balance).
   if (userId && loyaltyEarned > 0) {
     await admin.from('loyalty_transactions').insert({
+      ...(storeId ? { store_id: storeId } : {}),
       user_id: userId,
       type: 'earn',
       points: loyaltyEarned,
@@ -155,7 +167,7 @@ export async function finalizeOrderFromSession(
 
   // Referral reward (consumes a pending referral, rewards both parties once).
   if (userId) {
-    await grantReferralReward(userId, order.id);
+    await grantReferralReward(userId, order.id, storeId);
   }
 
   // Order confirmation email (best-effort).
@@ -224,6 +236,7 @@ async function createSubscription(
   userId: string,
   items: { product_id: string; quantity: number; unit_price_sen: number; is_subscription: boolean; subscription_interval: SubscriptionInterval | null }[],
   productById: Map<string, { id: string; name: string; sku: string | null }>,
+  storeId: string | null,
 ): Promise<string | null> {
   const admin = createAdminClient();
   const subItems = items.filter((i) => i.is_subscription);
@@ -239,6 +252,7 @@ async function createSubscription(
   const { data: sub, error } = await admin
     .from('subscriptions')
     .insert({
+      ...(storeId ? { store_id: storeId } : {}),
       user_id: userId,
       status: 'active',
       interval,
@@ -260,6 +274,7 @@ async function createSubscription(
 
   await admin.from('subscription_items').insert(
     subItems.map((i) => ({
+      ...(storeId ? { store_id: storeId } : {}),
       subscription_id: sub.id,
       product_id: i.product_id,
       quantity: i.quantity,
@@ -275,15 +290,19 @@ async function recordCouponRedemption(
   userId: string | null,
   orderId: string,
   discountSen: number,
+  storeId: string | null,
 ) {
   const admin = createAdminClient();
-  const { data: coupon } = await admin
+  // Coupon codes are unique per store now — scope the lookup when known.
+  let couponQuery = admin
     .from('coupons')
     .select('id, times_used')
-    .eq('code', code)
-    .maybeSingle();
+    .eq('code', code);
+  if (storeId) couponQuery = couponQuery.eq('store_id', storeId);
+  const { data: coupon } = await couponQuery.maybeSingle();
   if (!coupon) return;
   await admin.from('coupon_redemptions').insert({
+    ...(storeId ? { store_id: storeId } : {}),
     coupon_id: coupon.id,
     user_id: userId || null,
     order_id: orderId,
@@ -300,7 +319,11 @@ async function recordCouponRedemption(
  * If the buyer was referred and has a pending referral, reward both parties
  * with loyalty points (idempotent — the referral is marked 'rewarded').
  */
-async function grantReferralReward(userId: string, orderId: string) {
+async function grantReferralReward(
+  userId: string,
+  orderId: string,
+  storeId: string | null,
+) {
   const admin = createAdminClient();
   const { data: referral } = await admin
     .from('referrals')
@@ -314,14 +337,17 @@ async function grantReferralReward(userId: string, orderId: string) {
     REFERRAL_REWARD_SEN / LOYALTY_POINT_REDEMPTION_VALUE_SEN,
   );
 
+  const store = storeId ? { store_id: storeId } : {};
   await admin.from('loyalty_transactions').insert([
     {
+      ...store,
       user_id: referral.referrer_id,
       type: 'referral',
       points: rewardPoints,
       description: 'Referral reward (your friend ordered)',
     },
     {
+      ...store,
       user_id: userId,
       type: 'referral',
       points: rewardPoints,

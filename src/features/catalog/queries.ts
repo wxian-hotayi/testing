@@ -43,6 +43,9 @@ async function withPrimaryImages(
 export async function getActiveProducts(opts?: {
   categorySlug?: string;
   limit?: number;
+  /** Scope to a single store. Storefront pages pass this in MT-6; today the
+   * single default store makes it optional. */
+  storeId?: string;
 }): Promise<ProductCardVM[]> {
   try {
     const supabase = createPublicClient();
@@ -52,13 +55,15 @@ export async function getActiveProducts(opts?: {
       .eq('is_active', true)
       .order('is_best_seller', { ascending: false })
       .order('rating_count', { ascending: false });
+    if (opts?.storeId) query = query.eq('store_id', opts.storeId);
 
     if (opts?.categorySlug) {
-      const { data: cat } = await supabase
+      let catQuery = supabase
         .from('categories')
         .select('id')
-        .eq('slug', opts.categorySlug)
-        .maybeSingle();
+        .eq('slug', opts.categorySlug);
+      if (opts.storeId) catQuery = catQuery.eq('store_id', opts.storeId);
+      const { data: cat } = await catQuery.maybeSingle();
       if (!cat) return [];
       query = query.eq('category_id', cat.id);
     }
@@ -73,16 +78,21 @@ export async function getActiveProducts(opts?: {
   }
 }
 
-export async function getBestSellers(limit = 4): Promise<ProductCardVM[]> {
+export async function getBestSellers(
+  limit = 4,
+  storeId?: string,
+): Promise<ProductCardVM[]> {
   try {
     const supabase = createPublicClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('products')
       .select(CARD_COLUMNS)
       .eq('is_active', true)
       .eq('is_best_seller', true)
       .order('rating_count', { ascending: false })
       .limit(limit);
+    if (storeId) query = query.eq('store_id', storeId);
+    const { data, error } = await query;
     if (error) throw error;
     return withPrimaryImages(data ?? []);
   } catch (err) {
@@ -91,14 +101,16 @@ export async function getBestSellers(limit = 4): Promise<ProductCardVM[]> {
   }
 }
 
-export async function getCategories(): Promise<CategoryVM[]> {
+export async function getCategories(storeId?: string): Promise<CategoryVM[]> {
   try {
     const supabase = createPublicClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('categories')
       .select('id, slug, name, description, image_url')
       .eq('is_active', true)
       .order('position', { ascending: true });
+    if (storeId) query = query.eq('store_id', storeId);
+    const { data, error } = await query;
     if (error) throw error;
     return data ?? [];
   } catch (err) {
@@ -157,15 +169,17 @@ export async function getRecentReviews(limit = 6): Promise<RecentReviewVM[]> {
 
 export async function getCategoryBySlug(
   slug: string,
+  storeId?: string,
 ): Promise<CategoryVM | null> {
   try {
     const supabase = createPublicClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('categories')
       .select('id, slug, name, description, image_url')
       .eq('slug', slug)
-      .eq('is_active', true)
-      .maybeSingle();
+      .eq('is_active', true);
+    if (storeId) query = query.eq('store_id', storeId);
+    const { data, error } = await query.maybeSingle();
     if (error) throw error;
     return data ?? null;
   } catch (err) {
@@ -207,15 +221,17 @@ export async function getProductSlugs(): Promise<string[]> {
 /** Assemble the full PDP view model. Returns null if the product is missing. */
 export async function getProductBySlug(
   slug: string,
+  storeId?: string,
 ): Promise<ProductDetailVM | null> {
   try {
     const supabase = createPublicClient();
-    const { data: product, error } = await supabase
+    let productQuery = supabase
       .from('products')
       .select('*')
       .eq('slug', slug)
-      .eq('is_active', true)
-      .maybeSingle();
+      .eq('is_active', true);
+    if (storeId) productQuery = productQuery.eq('store_id', storeId);
+    const { data: product, error } = await productQuery.maybeSingle();
     if (error) throw error;
     if (!product) return null;
 

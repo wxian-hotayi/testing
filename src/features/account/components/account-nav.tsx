@@ -10,6 +10,8 @@ import {
   Heart,
   Gift,
   Users,
+  Mail,
+  Store,
   User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,6 +24,8 @@ const ITEMS = [
   { href: '/account/referrals', label: 'Referrals', icon: Users },
   { href: '/account/addresses', label: 'Addresses', icon: MapPin },
   { href: '/account/wishlist', label: 'Wishlist', icon: Heart },
+  { href: '/account/invitations', label: 'Invitations', icon: Mail },
+  { href: '/account/stores', label: 'My stores', icon: Store },
   { href: '/account/profile', label: 'Profile', icon: User },
 ];
 

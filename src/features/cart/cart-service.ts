@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { buildCartView } from './totals';
 import { EMPTY_CART, type CartLine, type CartCoupon, type CartView } from './types';
 import { SUBSCRIPTION_DISCOUNT_PERCENT } from '@/lib/constants';
+import { getCurrentStoreId } from '@/lib/tenant/context';
 import type { SubscriptionInterval } from '@/types/database.types';
 
 /**
@@ -70,12 +71,16 @@ async function getOrCreateCartId(owner: Owner): Promise<string | null> {
   const existing = await findActiveCartId(owner);
   if (existing) return existing;
   const admin = createAdminClient();
+  // Stamp the cart with the storefront's resolved store; the order created from
+  // it later inherits this store_id (order creation has no Host context).
+  const storeId = await getCurrentStoreId();
   const { data, error } = await admin
     .from('carts')
     .insert({
       user_id: owner.userId,
       session_token: owner.userId ? null : owner.token,
       status: 'active',
+      ...(storeId ? { store_id: storeId } : {}),
     })
     .select('id')
     .single();

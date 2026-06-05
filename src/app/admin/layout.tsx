@@ -2,21 +2,24 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Leaf, LogOut, ExternalLink } from 'lucide-react';
 import { AdminNav } from '@/features/admin/components/admin-nav';
-import { getProfile } from '@/features/account/queries';
+import { getCurrentActor } from '@/lib/rbac/actor';
+import { ROLE_META, isOperator } from '@/lib/rbac/permissions';
 import { signOut } from '@/features/auth/actions';
 import { Badge } from '@/components/ui/badge';
 
 /**
- * Admin chrome. Middleware already restricts `/admin/*` to staff/admin; this
- * is a defense-in-depth check at the layout level.
+ * Admin chrome. Middleware gates `/admin/*` to operators; this resolves the
+ * caller's full RBAC actor and passes their permissions to the nav so menu
+ * items are hidden when not permitted (defense-in-depth — each server action
+ * re-checks its own permission).
  */
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const profile = await getProfile();
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'staff')) {
+  const actor = await getCurrentActor();
+  if (!actor || !isOperator(actor.roleKey)) {
     redirect('/');
   }
 
@@ -29,7 +32,7 @@ export default async function AdminLayout({
               <Leaf className="size-6 text-primary" aria-hidden />
               Vitalis Admin
             </Link>
-            <Badge variant="muted" className="capitalize">{profile.role}</Badge>
+            <Badge variant="muted">{ROLE_META[actor.roleKey].label}</Badge>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -47,7 +50,7 @@ export default async function AdminLayout({
       <div className="container flex-1 py-8">
         <div className="grid gap-8 lg:grid-cols-[200px_1fr]">
           <aside>
-            <AdminNav />
+            <AdminNav permissions={actor.permissions} />
           </aside>
           <div className="min-w-0">{children}</div>
         </div>

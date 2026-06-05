@@ -10,24 +10,39 @@ import {
   Ticket,
   Star,
   Users,
+  UserCog,
+  Store,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { Permission } from '@/lib/rbac/permissions';
 
-const ITEMS = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
-  { href: '/admin/products', label: 'Products', icon: Box },
-  { href: '/admin/categories', label: 'Categories', icon: FolderTree },
-  { href: '/admin/coupons', label: 'Coupons', icon: Ticket },
-  { href: '/admin/reviews', label: 'Reviews', icon: Star },
-  { href: '/admin/users', label: 'Users', icon: Users },
+/** Each item declares the permission required to see it. */
+const ITEMS: {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  permission: Permission;
+}[] = [
+  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+  { href: '/admin/orders', label: 'Orders', icon: ShoppingCart, permission: 'orders.read' },
+  { href: '/admin/products', label: 'Products', icon: Box, permission: 'products.read' },
+  { href: '/admin/categories', label: 'Categories', icon: FolderTree, permission: 'categories.write' },
+  { href: '/admin/coupons', label: 'Coupons', icon: Ticket, permission: 'coupons.write' },
+  { href: '/admin/reviews', label: 'Reviews', icon: Star, permission: 'reviews.moderate' },
+  { href: '/admin/users', label: 'Users', icon: Users, permission: 'customers.read' },
+  { href: '/admin/members', label: 'Members', icon: UserCog, permission: 'members.manage' },
+  { href: '/admin/store', label: 'Store', icon: Store, permission: 'store.manage' },
+  { href: '/admin/access', label: 'Access', icon: ShieldCheck, permission: 'dashboard.view' },
 ];
 
-export function AdminNav() {
+export function AdminNav({ permissions }: { permissions: Permission[] }) {
   const pathname = usePathname();
+  const allowed = new Set(permissions);
+  const items = ITEMS.filter((i) => allowed.has(i.permission));
   return (
     <nav className="flex gap-1 overflow-x-auto lg:flex-col" aria-label="Admin">
-      {ITEMS.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon }) => {
         const active = href === '/admin' ? pathname === href : pathname.startsWith(href);
         return (
           <Link

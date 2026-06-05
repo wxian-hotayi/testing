@@ -2,8 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { requirePermission } from '@/lib/rbac/actor';
 import { getStripe } from '@/lib/stripe/server';
 import { toMinor } from '@/lib/money';
 import type {
@@ -15,26 +14,9 @@ import type {
 
 export type AdminResult = { ok: boolean; error?: string };
 
-/** Verify the caller is staff/admin. Required because admin mutations use the
- * RLS-bypassing service-role client. `adminOnly` restricts to role 'admin'. */
-async function requireStaff(adminOnly = false) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated.');
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
-  const role = profile?.role;
-  if (!role || (role !== 'admin' && role !== 'staff')) {
-    throw new Error('Forbidden.');
-  }
-  if (adminOnly && role !== 'admin') throw new Error('Admins only.');
-  return { admin: createAdminClient(), role, userId: user.id };
-}
+// Each mutation is gated by a specific permission via `requirePermission`,
+// which also returns the RLS-bypassing service-role client. That app-layer
+// check is the security boundary for admin writes (they bypass RLS).
 
 function str(fd: FormData, key: string): string | null {
   const v = fd.get(key)?.toString().trim();
@@ -53,7 +35,7 @@ export async function upsertProductAction(
   fd: FormData,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('products.write');
     const id = str(fd, 'id');
     const name = str(fd, 'name');
     const slug = str(fd, 'slug');
@@ -102,7 +84,7 @@ export async function upsertProductAction(
 
 export async function deleteProductAction(id: string): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('products.delete');
     const { error } = await admin.from('products').delete().eq('id', id);
     if (error) throw error;
     revalidatePath('/admin/products');
@@ -118,7 +100,7 @@ export async function upsertCategoryAction(
   fd: FormData,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('categories.write');
     const id = str(fd, 'id');
     const name = str(fd, 'name');
     const slug = str(fd, 'slug');
@@ -146,7 +128,7 @@ export async function upsertCategoryAction(
 
 export async function deleteCategoryAction(id: string): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('categories.write');
     await admin.from('categories').delete().eq('id', id);
     revalidatePath('/admin/categories');
     return { ok: true };
@@ -161,7 +143,7 @@ export async function upsertCouponAction(
   fd: FormData,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('coupons.write');
     const id = str(fd, 'id');
     const code = str(fd, 'code');
     const discountType = str(fd, 'discount_type') as DiscountType | null;
@@ -197,7 +179,7 @@ export async function upsertCouponAction(
 
 export async function toggleCouponAction(id: string, active: boolean): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('coupons.write');
     await admin.from('coupons').update({ is_active: active }).eq('id', id);
     revalidatePath('/admin/coupons');
     return { ok: true };
@@ -212,7 +194,7 @@ export async function updateOrderAction(
   patch: { status?: OrderStatus; tracking_number?: string; tracking_url?: string },
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('orders.update');
     await admin.from('orders').update(patch).eq('id', id);
     revalidatePath(`/admin/orders/${id}`);
     revalidatePath('/admin/orders');
@@ -224,7 +206,7 @@ export async function updateOrderAction(
 
 export async function refundOrderAction(id: string): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('orders.refund');
     const { data: order } = await admin
       .from('orders')
       .select('stripe_payment_intent_id, payment_status')
@@ -259,7 +241,7 @@ export async function setReviewStatusAction(
   status: ReviewStatus,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff();
+    const { admin } = await requirePermission('reviews.moderate');
     await admin.from('reviews').update({ status }).eq('id', id);
     revalidatePath('/admin/reviews');
     return { ok: true };
@@ -274,7 +256,7 @@ export async function setUserRoleAction(
   role: UserRole,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requireStaff(true); // admin only
+    const { admin } = await requirePermission('customers.manage');
     await admin.from('profiles').update({ role }).eq('id', id);
     revalidatePath('/admin/users');
     return { ok: true };

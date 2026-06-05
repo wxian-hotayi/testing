@@ -6,7 +6,13 @@ import { setUserRoleAction } from '../actions';
 import { USER_ROLES } from '@/lib/constants';
 import type { Tables, UserRole } from '@/types/database.types';
 
-export function UserRoleManager({ users }: { users: Tables<'profiles'>[] }) {
+export function UserRoleManager({
+  users,
+  canManage = true,
+}: {
+  users: Tables<'profiles'>[];
+  canManage?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -25,7 +31,7 @@ export function UserRoleManager({ users }: { users: Tables<'profiles'>[] }) {
               <td className="p-3">
                 <select
                   defaultValue={u.role}
-                  disabled={pending}
+                  disabled={pending || !canManage}
                   onChange={(e) =>
                     startTransition(async () => {
                       await setUserRoleAction(u.id, e.target.value as UserRole);
