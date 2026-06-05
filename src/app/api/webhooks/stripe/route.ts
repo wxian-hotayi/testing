@@ -51,6 +51,12 @@ export async function POST(req: NextRequest) {
         await advanceSubscriptionBilling(event.data.object);
         break;
       }
+      case 'account.updated': {
+        // Connect: keep the store's charges_enabled flag in sync as the
+        // merchant completes (or loses) onboarding.
+        await syncConnectedAccount(event.data.object);
+        break;
+      }
       default:
         break;
     }
@@ -61,6 +67,14 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+async function syncConnectedAccount(account: Stripe.Account) {
+  const admin = createAdminClient();
+  await admin
+    .from('stores')
+    .update({ stripe_charges_enabled: account.charges_enabled ?? false })
+    .eq('stripe_account_id', account.id);
 }
 
 async function syncSubscriptionStatus(sub: Stripe.Subscription) {

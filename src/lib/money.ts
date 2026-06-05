@@ -36,3 +36,13 @@ export function percentOff(originalSen: number, discountedSen: number): number {
   if (originalSen <= 0) return 0;
   return Math.round(((originalSen - discountedSen) / originalSen) * 100);
 }
+
+/**
+ * Platform commission (sen) on a charged amount, given basis points
+ * (200 bps = 2%). Never negative and never exceeds the amount — Stripe rejects
+ * an application fee larger than the charge.
+ */
+export function platformFeeSen(amountSen: number, bps: number): number {
+  if (amountSen <= 0 || bps <= 0) return 0;
+  return Math.min(amountSen, Math.round((amountSen * bps) / 10000));
+}

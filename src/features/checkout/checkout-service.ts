@@ -3,9 +3,12 @@ import 'server-only';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getCartView } from '@/features/cart/cart-service';
+import { getCurrentStoreId } from '@/lib/tenant/context';
 import { env } from '@/lib/env';
-import { CURRENCY } from '@/lib/constants';
+import { CURRENCY, PLATFORM_FEE_BPS } from '@/lib/constants';
+import { platformFeeSen } from '@/lib/money';
 import type { CartLine } from '@/features/cart/types';
 
 const STRIPE_CURRENCY = CURRENCY.code.toLowerCase(); // 'myr'
@@ -101,6 +104,44 @@ export async function createCheckoutSession(): Promise<{ url: string }> {
     user_id: userId ?? '',
   };
 
+  // --- Stripe Connect routing (MT-5) -----------------------------------------
+  // If the current store has a charges-enabled connected account, route the
+  // charge there (destination charge) and take the platform fee; otherwise the
+  // charge stays on the platform account (default / un-onboarded stores).
+  let connectAccountId: string | null = null;
+  try {
+    const storeId = await getCurrentStoreId();
+    if (storeId) {
+      const admin = createAdminClient();
+      const { data: store } = await admin
+        .from('stores')
+        .select('stripe_account_id, stripe_charges_enabled')
+        .eq('id', storeId)
+        .maybeSingle();
+      if (store?.stripe_account_id && store.stripe_charges_enabled) {
+        connectAccountId = store.stripe_account_id;
+      }
+    }
+  } catch (err) {
+    console.warn('[checkout] Connect lookup failed; using platform account:', err);
+  }
+
+  const transferData = connectAccountId ? { destination: connectAccountId } : undefined;
+  const feeSen = platformFeeSen(cart.totalSen, PLATFORM_FEE_BPS);
+
+  const paymentIntentData: Stripe.Checkout.SessionCreateParams.PaymentIntentData = {
+    metadata,
+    ...(transferData
+      ? { application_fee_amount: feeSen, transfer_data: transferData }
+      : {}),
+  };
+  const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
+    metadata,
+    ...(transferData
+      ? { application_fee_percent: PLATFORM_FEE_BPS / 100, transfer_data: transferData }
+      : {}),
+  };
+
   const params: Stripe.Checkout.SessionCreateParams = {
     mode: hasSubscription ? 'subscription' : 'payment',
     line_items: lineItems,
@@ -113,8 +154,8 @@ export async function createCheckoutSession(): Promise<{ url: string }> {
     ...(customerEmail ? { customer_email: customerEmail } : {}),
     ...(discounts ? { discounts } : {}),
     ...(hasSubscription
-      ? { subscription_data: { metadata } }
-      : { payment_intent_data: { metadata } }),
+      ? { subscription_data: subscriptionData }
+      : { payment_intent_data: paymentIntentData }),
   };
 
   const session = await stripe.checkout.sessions.create(params);

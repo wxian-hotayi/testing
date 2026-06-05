@@ -57,6 +57,13 @@ export type SubscriptionInterval = (typeof SUBSCRIPTION_INTERVALS)[number];
 /** Discount applied to subscription orders vs. one-time purchase. */
 export const SUBSCRIPTION_DISCOUNT_PERCENT = 15;
 
+/**
+ * Platform commission taken from connected-store sales via Stripe Connect, in
+ * basis points (200 = 2.00%). Applied as the `application_fee` on destination
+ * charges; the remainder settles to the merchant's connected account.
+ */
+export const PLATFORM_FEE_BPS = 200;
+
 export const SITE = {
   name: 'Vitalis',
   tagline: 'Science-backed supplements for everyday performance',

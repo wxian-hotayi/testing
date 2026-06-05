@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getCurrentActor, actorCan } from '@/lib/rbac/actor';
 import { getCurrentStore } from '@/lib/tenant/context';
 import { StoreSettingsForm } from '@/features/stores/components/store-settings-form';
+import { StripeConnectPanel } from '@/features/stores/components/stripe-connect-panel';
 
 export const metadata = { title: 'Store settings' };
 
@@ -18,7 +19,13 @@ export default async function AdminStorePage() {
         Branding and configuration for this store.
       </p>
       {store ? (
-        <StoreSettingsForm store={store} />
+        <div className="space-y-8">
+          <StoreSettingsForm store={store} />
+          <StripeConnectPanel
+            accountId={store.stripe_account_id}
+            chargesEnabled={store.stripe_charges_enabled}
+          />
+        </div>
       ) : (
         <p className="text-sm text-muted-foreground">No store resolved for this request.</p>
       )}

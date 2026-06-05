@@ -115,6 +115,12 @@ export const getStorefrontStore = cache(
       if (error || !data) return { store: null, resolution: 'unavailable' };
       return { store: data, resolution: 'default' };
     } catch (err) {
+      // Re-throw Next's internal control-flow errors (dynamic-rendering bailout,
+      // notFound, redirect) — they carry a string `digest` and MUST propagate so
+      // static-generation detection works cleanly and isn't logged as a fault.
+      if (err && typeof err === 'object' && typeof (err as { digest?: unknown }).digest === 'string') {
+        throw err;
+      }
       console.warn('[tenant] getStorefrontStore failed:', err);
       return { store: null, resolution: 'unavailable' };
     }

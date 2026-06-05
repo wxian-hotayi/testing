@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatMoney, toMinor, toMajor, percentOff } from './money';
+import { formatMoney, toMinor, toMajor, percentOff, platformFeeSen } from './money';
 
 describe('money', () => {
   describe('formatMoney', () => {
@@ -34,6 +34,21 @@ describe('money', () => {
     });
     it('returns 0 for non-positive original', () => {
       expect(percentOff(0, 100)).toBe(0);
+    });
+  });
+
+  describe('platformFeeSen', () => {
+    it('computes basis-point commission, rounded', () => {
+      expect(platformFeeSen(10000, 200)).toBe(200); // 2% of RM100
+      expect(platformFeeSen(9999, 200)).toBe(200); // 199.98 → 200
+    });
+    it('is zero for non-positive amount or bps', () => {
+      expect(platformFeeSen(0, 200)).toBe(0);
+      expect(platformFeeSen(10000, 0)).toBe(0);
+      expect(platformFeeSen(-5, 200)).toBe(0);
+    });
+    it('never exceeds the charged amount', () => {
+      expect(platformFeeSen(100, 20000)).toBe(100);
     });
   });
 });

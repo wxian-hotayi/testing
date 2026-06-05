@@ -115,10 +115,25 @@ Migration [0012_multitenant_scoping.sql](../supabase/migrations/0012_multitenant
 - Platform-admin cross-store console (list/suspend stores, impersonate).
 - Middleware `/admin` guard updated to store-aware membership.
 
-### ⬜ MT-5 — Stripe Connect (per-store payouts)
-- Use `stores.stripe_account_id` / `stripe_charges_enabled` (already present).
-- Connect onboarding (Express/Standard); create Checkout sessions on the
-  connected account; route webhooks per connected account; platform fee.
+### ✅ MT-5 — Stripe Connect (per-store payouts) *(implemented, uncommitted)*
+- **Onboarding** ([stores/connect.ts](../src/features/stores/connect.ts)):
+  `startStripeOnboardingAction` creates an Express connected account (persists
+  `stores.stripe_account_id`) and returns a hosted Account Link;
+  `refreshStripeStatusAction` syncs `stripe_charges_enabled`. Gated `store.manage`.
+- **Checkout routing** ([checkout-service.ts](../src/features/checkout/checkout-service.ts)):
+  **destination charge** — when the resolved store has a charges-enabled account,
+  the session sets `transfer_data.destination` + an `application_fee`
+  (`PLATFORM_FEE_BPS`, default 2%; `application_fee_percent` for subscriptions);
+  otherwise the charge stays on the platform account (default/un-onboarded stores
+  keep working — best-effort lookup, never blocks checkout).
+- **Webhook**: `account.updated` → sync `stripe_charges_enabled`.
+- **UI**: `StripeConnectPanel` on [/admin/store](../src/app/admin/store/page.tsx)
+  (status + connect/continue/refresh).
+- Pure fee math: `platformFeeSen()` in [money.ts](../src/lib/money.ts) (tested).
+- **Local-first**: `getStripe()` throws a clear error without `STRIPE_SECRET_KEY`
+  (same as existing checkout) — no live Stripe calls occur in build/tests.
+- **Deferred**: direct-charge mode + Connect Express dashboard links; per-store
+  payout reporting; refunds routed through the connected account.
 
 ### ✅ MT-6 — Storefront subdomain routing *(implemented, uncommitted)*
 - Strict storefront resolver `getStorefrontStore()` (React-cached) +
