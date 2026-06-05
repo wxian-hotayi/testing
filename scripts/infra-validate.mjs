@@ -93,7 +93,35 @@ async function supabase(role) {
   return client;
 }
 
-/** Count rows visible to a client (RLS-aware). @returns {Promise<{count:number|null, error:any}>} */
+// --- error classifiers -------------------------------------------------------
+const isMissingTable = (e) => !!e && (e.code === '42P01' || e.code === 'PGRST205' ||
+  /could not find the table|does not exist|schema cache/i.test(e.message ?? ''));
+const isMissingColumn = (e) => !!e && (e.code === '42703' ||
+  /column .* does not exist|could not find the .* column/i.test(e.message ?? ''));
+const isConnError = (e) => !!e &&
+  /fetch failed|enotfound|getaddrinfo|econnrefused|timed out|aborted|invalid api key|jwt|unauthor|401|403/i
+    .test(`${e.message ?? ''} ${e.code ?? ''}`);
+
+/**
+ * Existence probe via a real GET (NOT head:true). HEAD requests return no body,
+ * so PostgREST's missing-table/column error is lost — which previously masked
+ * absent tables as "present". Always probe with a GET. @returns {Promise<{state:'present'|'missing'|'error', error?:any}>}
+ */
+async function probeTable(client, table) {
+  try {
+    const q = client.from(table).select('*').limit(1);
+    const sig = timeoutSignal();
+    const { error } = await (sig ? q.abortSignal(sig) : q);
+    if (!error) return { state: 'present' };
+    if (isMissingTable(error)) return { state: 'missing' };
+    return { state: 'error', error };
+  } catch (e) {
+    return { state: 'error', error: e };
+  }
+}
+
+/** Row count visible to a client (RLS-aware) — only meaningful for tables known
+ *  to exist. @returns {Promise<{count:number|null, error:any}>} */
 async function headCount(client, table) {
   const q = client.from(table).select('*', { count: 'exact', head: true });
   const sig = timeoutSignal();
@@ -109,15 +137,16 @@ async function gate1() {
     ]);
   }
   const client = await supabase('service');
-  const { error } = await headCount(client, 'stores').catch((e) => ({ error: e }));
-  if (error) {
+  // A missing-table response STILL proves we reached + authenticated against
+  // PostgREST; only network/auth errors are a connectivity FAIL.
+  const r = await probeTable(client, 'profiles');
+  if (r.state === 'error' && isConnError(r.error)) {
     return gate('GATE 1', 'Supabase Connectivity', true, FAIL, [
-      `Service-role query failed: ${error.message ?? error}`,
-      'Connection or authentication problem (or the "stores" table is missing — see Gate 2).',
+      `Connection/auth failed: ${r.error?.message ?? r.error}`,
     ]);
   }
   return gate('GATE 1', 'Supabase Connectivity', true, PASS, [
-    `Connected to ${ENV.supabaseUrl} and ran a service-role query.`,
+    `Reached ${ENV.supabaseUrl} with the service-role key (authenticated PostgREST response).`,
   ]);
 }
 
@@ -130,19 +159,19 @@ async function gate2(connected) {
   if (!connected) return gate('GATE 2', 'Migration State / Tables', true, SKIP, ['Supabase not connected.']);
   const client = await supabase('service');
   const missing = [];
+  const errored = [];
   for (const t of REQUIRED_TABLES) {
-    const { error } = await headCount(client, t).catch((e) => ({ error: e }));
-    if (error && (error.code === '42P01' || /relation .* does not exist/i.test(error.message ?? ''))) {
-      missing.push(t);
-    } else if (error) {
-      missing.push(`${t} (query error: ${error.message ?? error})`);
-    }
+    const r = await probeTable(client, t);
+    if (r.state === 'missing') missing.push(t);
+    else if (r.state === 'error') errored.push(`${t} (${r.error?.message ?? r.error})`);
   }
-  const lines = [
-    missing.length ? `Missing/unverifiable tables: ${missing.join(', ')}` : `All ${REQUIRED_TABLES.length} required tables present.`,
-    `${NV}: migration ledger (0011–0015) + index/constraint existence (incl. unique(stripe_checkout_session_id) from 0015) are not introspectable via PostgREST. Verify with: \`supabase migration list\` and \`supabase db diff\`, or a SQL query on pg_indexes/pg_constraint.`,
-  ];
-  return gate('GATE 2', 'Migration State / Tables', true, missing.length ? FAIL : PASS, lines);
+  const lines = [];
+  if (missing.length) lines.push(`❌ MISSING tables: ${missing.join(', ')}`);
+  if (errored.length) lines.push(`⚠ unverifiable: ${errored.join('; ')}`);
+  if (!missing.length && !errored.length) lines.push(`All ${REQUIRED_TABLES.length} required tables present.`);
+  lines.push(`${NV}: migration ledger (0011–0015) + index/constraint existence (incl. unique(stripe_checkout_session_id), 0015) not introspectable via PostgREST. Verify with \`supabase migration list\` / SQL on pg_indexes,pg_constraint.`);
+  const status = missing.length || errored.length ? FAIL : PASS;
+  return gate('GATE 2', 'Migration State / Tables', true, status, lines);
 }
 
 // --- GATE 3: tenancy columns (store_id) --------------------------------------
@@ -155,7 +184,9 @@ async function gate3(connected) {
     /** @type {any} */
     let error = null;
     try {
-      const q = client.from(t).select('store_id', { head: true }).limit(1);
+      // NOT head:true — a HEAD request returns no body, so PostgREST's error
+      // (e.g. undefined column) can't be parsed. A tiny GET surfaces it.
+      const q = client.from(t).select('store_id').limit(1);
       const sig = timeoutSignal();
       const res = await (sig ? q.abortSignal(sig) : q);
       error = res.error;
@@ -182,7 +213,16 @@ async function gate4(connected) {
   const lines = [];
   let anyLeak = false;
   let anyInconclusive = false;
+  let anyMissing = false;
   for (const t of ['orders', 'store_members']) {
+    // Existence first (GET) — a missing table can't be RLS-tested and must not
+    // be misreported as "no rows".
+    const exists = await probeTable(service, t);
+    if (exists.state === 'missing') {
+      anyMissing = true;
+      lines.push(`❌ ${t}: table MISSING — RLS cannot be tested (apply migrations).`);
+      continue;
+    }
     const s = await headCount(service, t).catch((e) => ({ count: null, error: e }));
     const a = await headCount(anon, t).catch((e) => ({ count: null, error: e }));
     const serviceN = s.count;
@@ -197,7 +237,7 @@ async function gate4(connected) {
       lines.push(`⚠ ${t}: no rows exist (service=0) — cannot prove RLS without seeded data.`);
     }
   }
-  const status = anyLeak ? FAIL : anyInconclusive ? WARN : PASS;
+  const status = anyLeak || anyMissing ? FAIL : anyInconclusive ? WARN : PASS;
   return gate('GATE 4', 'RLS Validation', true, status, lines);
 }
 
