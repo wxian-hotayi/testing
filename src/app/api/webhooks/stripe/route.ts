@@ -57,6 +57,15 @@ export async function POST(req: NextRequest) {
         await syncConnectedAccount(event.data.object);
         break;
       }
+      case 'charge.refunded': {
+        // Sync refunds initiated outside the app (e.g. from the Stripe
+        // dashboard) back onto the order. Idempotent.
+        await syncRefundFromCharge(event.data.object);
+        break;
+      }
+      // Note: payment_intent.succeeded is intentionally NOT handled — order
+      // finalization happens on checkout.session.completed; handling both would
+      // risk double-processing.
       default:
         break;
     }
@@ -75,6 +84,21 @@ async function syncConnectedAccount(account: Stripe.Account) {
     .from('stores')
     .update({ stripe_charges_enabled: account.charges_enabled ?? false })
     .eq('stripe_account_id', account.id);
+}
+
+async function syncRefundFromCharge(charge: Stripe.Charge) {
+  const pi =
+    typeof charge.payment_intent === 'string' ? charge.payment_intent : null;
+  if (!pi) return;
+  const fullyRefunded = (charge.amount_refunded ?? 0) >= (charge.amount ?? 0);
+  const admin = createAdminClient();
+  await admin
+    .from('orders')
+    .update({
+      status: fullyRefunded ? 'refunded' : 'partially_refunded',
+      payment_status: fullyRefunded ? 'refunded' : 'partially_refunded',
+    })
+    .eq('stripe_payment_intent_id', pi);
 }
 
 async function syncSubscriptionStatus(sub: Stripe.Subscription) {

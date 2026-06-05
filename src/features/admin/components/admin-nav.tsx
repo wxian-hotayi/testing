@@ -30,7 +30,7 @@ const ITEMS: {
   { href: '/admin/categories', label: 'Categories', icon: FolderTree, permission: 'categories.write' },
   { href: '/admin/coupons', label: 'Coupons', icon: Ticket, permission: 'coupons.write' },
   { href: '/admin/reviews', label: 'Reviews', icon: Star, permission: 'reviews.moderate' },
-  { href: '/admin/users', label: 'Users', icon: Users, permission: 'customers.read' },
+  { href: '/admin/users', label: 'Users', icon: Users, permission: 'platform.manage' },
   { href: '/admin/members', label: 'Members', icon: UserCog, permission: 'members.manage' },
   { href: '/admin/store', label: 'Store', icon: Store, permission: 'store.manage' },
   { href: '/admin/access', label: 'Access', icon: ShieldCheck, permission: 'dashboard.view' },

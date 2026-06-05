@@ -21,7 +21,7 @@ export type Store = Tables<'stores'>;
  * Reading headers() opts the caller into dynamic rendering — only call this in
  * code paths that are meant to be per-store/dynamic.
  */
-export async function getCurrentStore(): Promise<Store | null> {
+export const getCurrentStore = cache(async (): Promise<Store | null> => {
   try {
     const h = await headers();
     const slug = h.get(STORE_SLUG_HEADER);
@@ -44,10 +44,13 @@ export async function getCurrentStore(): Promise<Store | null> {
       .maybeSingle();
     return fallback ?? null;
   } catch (err) {
+    if (err && typeof err === 'object' && typeof (err as { digest?: unknown }).digest === 'string') {
+      throw err;
+    }
     console.warn('[tenant] getCurrentStore failed:', err);
     return null;
   }
-}
+});
 
 /** The current store id, or null. Convenience for store-scoped queries (MT-2+). */
 export async function getCurrentStoreId(): Promise<string | null> {

@@ -2,6 +2,7 @@ import 'server-only';
 
 import { subDays, format } from 'date-fns';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getCurrentStoreId } from '@/lib/tenant/context';
 
 export type DashboardMetrics = {
   revenueSen: number;
@@ -39,6 +40,34 @@ const EMPTY: DashboardMetrics = {
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   try {
     const admin = createAdminClient();
+    // Scope all KPIs to the current store (defensive: unscoped pre-migration).
+    const storeId = await getCurrentStoreId();
+
+    let ordersQ = admin
+      .from('orders')
+      .select('id, total_sen, user_id, utm_source, created_at')
+      .eq('payment_status', 'paid');
+    if (storeId) ordersQ = ordersQ.eq('store_id', storeId);
+
+    let itemsQ = admin.from('order_items').select('product_name, quantity, total_sen');
+    if (storeId) itemsQ = itemsQ.eq('store_id', storeId);
+
+    let subsQ = admin.from('subscriptions').select('recurring_total_sen').eq('status', 'active');
+    if (storeId) subsQ = subsQ.eq('store_id', storeId);
+
+    let lowQ = admin
+      .from('products')
+      .select('name, stock_quantity, low_stock_threshold, track_inventory');
+    if (storeId) lowQ = lowQ.eq('store_id', storeId);
+
+    let totalCartsQ = admin.from('carts').select('id', { count: 'exact', head: true });
+    if (storeId) totalCartsQ = totalCartsQ.eq('store_id', storeId);
+
+    let convCartsQ = admin
+      .from('carts')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'converted');
+    if (storeId) convCartsQ = convCartsQ.eq('store_id', storeId);
 
     const [
       { data: orders },
@@ -48,30 +77,12 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       { count: totalCarts },
       { count: convertedCarts },
     ] = await Promise.all([
-      admin
-        .from('orders')
-        .select('id, total_sen, user_id, utm_source, created_at')
-        .eq('payment_status', 'paid')
-        .order('created_at', { ascending: false })
-        .limit(1000),
-      admin
-        .from('order_items')
-        .select('product_name, quantity, total_sen')
-        .limit(5000),
-      admin
-        .from('subscriptions')
-        .select('recurring_total_sen')
-        .eq('status', 'active'),
-      admin
-        .from('products')
-        .select('name, stock_quantity, low_stock_threshold, track_inventory')
-        .order('stock_quantity', { ascending: true })
-        .limit(50),
-      admin.from('carts').select('id', { count: 'exact', head: true }),
-      admin
-        .from('carts')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'converted'),
+      ordersQ.order('created_at', { ascending: false }).limit(1000),
+      itemsQ.limit(5000),
+      subsQ,
+      lowQ.order('stock_quantity', { ascending: true }).limit(50),
+      totalCartsQ,
+      convCartsQ,
     ]);
 
     const paidOrders = orders ?? [];
@@ -166,6 +177,11 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       revenueByDay,
     };
   } catch (err) {
+    // Let Next's dynamic-rendering bailout (and other control-flow errors)
+    // propagate so static-generation detection stays clean.
+    if (err && typeof err === 'object' && typeof (err as { digest?: unknown }).digest === 'string') {
+      throw err;
+    }
     console.warn('[admin] getDashboardMetrics failed:', err);
     return EMPTY;
   }

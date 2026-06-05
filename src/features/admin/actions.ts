@@ -35,7 +35,7 @@ export async function upsertProductAction(
   fd: FormData,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('products.write');
+    const { admin, actor } = await requirePermission('products.write');
     const id = str(fd, 'id');
     const name = str(fd, 'name');
     const slug = str(fd, 'slug');
@@ -69,10 +69,13 @@ export async function upsertProductAction(
     };
 
     if (id) {
-      const { error } = await admin.from('products').update(row).eq('id', id);
+      let q = admin.from('products').update(row).eq('id', id);
+      if (actor.storeId) q = q.eq('store_id', actor.storeId);
+      const { error } = await q;
       if (error) throw error;
     } else {
-      const { error } = await admin.from('products').insert(row);
+      const insertRow = { ...row, ...(actor.storeId ? { store_id: actor.storeId } : {}) };
+      const { error } = await admin.from('products').insert(insertRow);
       if (error) throw error;
     }
   } catch (err) {
@@ -84,8 +87,10 @@ export async function upsertProductAction(
 
 export async function deleteProductAction(id: string): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('products.delete');
-    const { error } = await admin.from('products').delete().eq('id', id);
+    const { admin, actor } = await requirePermission('products.delete');
+    let q = admin.from('products').delete().eq('id', id);
+    if (actor.storeId) q = q.eq('store_id', actor.storeId);
+    const { error } = await q;
     if (error) throw error;
     revalidatePath('/admin/products');
     return { ok: true };
@@ -100,7 +105,7 @@ export async function upsertCategoryAction(
   fd: FormData,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('categories.write');
+    const { admin, actor } = await requirePermission('categories.write');
     const id = str(fd, 'id');
     const name = str(fd, 'name');
     const slug = str(fd, 'slug');
@@ -113,10 +118,13 @@ export async function upsertCategoryAction(
       is_active: bool(fd, 'is_active'),
     };
     if (id) {
-      const { error } = await admin.from('categories').update(row).eq('id', id);
+      let q = admin.from('categories').update(row).eq('id', id);
+      if (actor.storeId) q = q.eq('store_id', actor.storeId);
+      const { error } = await q;
       if (error) throw error;
     } else {
-      const { error } = await admin.from('categories').insert(row);
+      const insertRow = { ...row, ...(actor.storeId ? { store_id: actor.storeId } : {}) };
+      const { error } = await admin.from('categories').insert(insertRow);
       if (error) throw error;
     }
   } catch (err) {
@@ -128,8 +136,10 @@ export async function upsertCategoryAction(
 
 export async function deleteCategoryAction(id: string): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('categories.write');
-    await admin.from('categories').delete().eq('id', id);
+    const { admin, actor } = await requirePermission('categories.write');
+    let q = admin.from('categories').delete().eq('id', id);
+    if (actor.storeId) q = q.eq('store_id', actor.storeId);
+    await q;
     revalidatePath('/admin/categories');
     return { ok: true };
   } catch (err) {
@@ -143,7 +153,7 @@ export async function upsertCouponAction(
   fd: FormData,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('coupons.write');
+    const { admin, actor } = await requirePermission('coupons.write');
     const id = str(fd, 'id');
     const code = str(fd, 'code');
     const discountType = str(fd, 'discount_type') as DiscountType | null;
@@ -164,10 +174,13 @@ export async function upsertCouponAction(
       is_active: bool(fd, 'is_active'),
     };
     if (id) {
-      const { error } = await admin.from('coupons').update(row).eq('id', id);
+      let q = admin.from('coupons').update(row).eq('id', id);
+      if (actor.storeId) q = q.eq('store_id', actor.storeId);
+      const { error } = await q;
       if (error) throw error;
     } else {
-      const { error } = await admin.from('coupons').insert(row);
+      const insertRow = { ...row, ...(actor.storeId ? { store_id: actor.storeId } : {}) };
+      const { error } = await admin.from('coupons').insert(insertRow);
       if (error) throw error;
     }
   } catch (err) {
@@ -179,8 +192,10 @@ export async function upsertCouponAction(
 
 export async function toggleCouponAction(id: string, active: boolean): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('coupons.write');
-    await admin.from('coupons').update({ is_active: active }).eq('id', id);
+    const { admin, actor } = await requirePermission('coupons.write');
+    let q = admin.from('coupons').update({ is_active: active }).eq('id', id);
+    if (actor.storeId) q = q.eq('store_id', actor.storeId);
+    await q;
     revalidatePath('/admin/coupons');
     return { ok: true };
   } catch (err) {
@@ -194,8 +209,10 @@ export async function updateOrderAction(
   patch: { status?: OrderStatus; tracking_number?: string; tracking_url?: string },
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('orders.update');
-    await admin.from('orders').update(patch).eq('id', id);
+    const { admin, actor } = await requirePermission('orders.update');
+    let q = admin.from('orders').update(patch).eq('id', id);
+    if (actor.storeId) q = q.eq('store_id', actor.storeId);
+    await q;
     revalidatePath(`/admin/orders/${id}`);
     revalidatePath('/admin/orders');
     return { ok: true };
@@ -206,12 +223,13 @@ export async function updateOrderAction(
 
 export async function refundOrderAction(id: string): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('orders.refund');
-    const { data: order } = await admin
+    const { admin, actor } = await requirePermission('orders.refund');
+    let lookup = admin
       .from('orders')
       .select('stripe_payment_intent_id, payment_status')
-      .eq('id', id)
-      .maybeSingle();
+      .eq('id', id);
+    if (actor.storeId) lookup = lookup.eq('store_id', actor.storeId);
+    const { data: order } = await lookup.maybeSingle();
     if (!order) return { ok: false, error: 'Order not found.' };
 
     if (order.stripe_payment_intent_id) {
@@ -224,10 +242,12 @@ export async function refundOrderAction(id: string): Promise<AdminResult> {
         return { ok: false, error: 'Stripe refund failed.' };
       }
     }
-    await admin
+    let upd = admin
       .from('orders')
       .update({ status: 'refunded', payment_status: 'refunded' })
       .eq('id', id);
+    if (actor.storeId) upd = upd.eq('store_id', actor.storeId);
+    await upd;
     revalidatePath(`/admin/orders/${id}`);
     return { ok: true };
   } catch (err) {
@@ -241,8 +261,10 @@ export async function setReviewStatusAction(
   status: ReviewStatus,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('reviews.moderate');
-    await admin.from('reviews').update({ status }).eq('id', id);
+    const { admin, actor } = await requirePermission('reviews.moderate');
+    let q = admin.from('reviews').update({ status }).eq('id', id);
+    if (actor.storeId) q = q.eq('store_id', actor.storeId);
+    await q;
     revalidatePath('/admin/reviews');
     return { ok: true };
   } catch (err) {
@@ -250,13 +272,15 @@ export async function setReviewStatusAction(
   }
 }
 
-// --- Users -------------------------------------------------------------------
+// --- Users (platform-level: edits the global profiles.role) ------------------
 export async function setUserRoleAction(
   id: string,
   role: UserRole,
 ): Promise<AdminResult> {
   try {
-    const { admin } = await requirePermission('customers.manage');
+    // platform.manage — only the platform operator edits global roles. Store
+    // teams are managed per-store via /admin/members.
+    const { admin } = await requirePermission('platform.manage');
     await admin.from('profiles').update({ role }).eq('id', id);
     revalidatePath('/admin/users');
     return { ok: true };

@@ -1,19 +1,23 @@
+import { redirect } from 'next/navigation';
 import { listUsers } from '@/features/admin/queries';
 import { UserRoleManager } from '@/features/admin/components/user-role-manager';
 import { getCurrentActor, actorCan } from '@/lib/rbac/actor';
 
 export default async function AdminUsersPage() {
-  const [users, actor] = await Promise.all([listUsers(), getCurrentActor()]);
-  const canManage = actorCan(actor, 'customers.manage');
+  // Platform-level: lists ALL profiles and edits the global role. Restricted to
+  // the platform operator — store teams are managed at /admin/members.
+  const actor = await getCurrentActor();
+  if (!actorCan(actor, 'platform.manage')) redirect('/admin');
+
+  const users = await listUsers();
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold">Users</h1>
+      <h1 className="mb-4 text-2xl font-bold">Platform users</h1>
       <p className="mb-4 text-sm text-muted-foreground">
-        {canManage
-          ? 'Change a user’s global role. (Per-store departmental roles are managed in store membership — MT-4.)'
-          : 'You can view users but not change roles (requires the customers.manage permission).'}
+        Global accounts and their platform role. To manage a store’s team and
+        departmental roles, use that store’s <strong>Members</strong> page.
       </p>
-      <UserRoleManager users={users} canManage={canManage} />
+      <UserRoleManager users={users} canManage />
     </div>
   );
 }
