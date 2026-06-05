@@ -22,6 +22,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "go-live-check": "node scripts/go-live-check.mjs",
+    "infra-validate": "node scripts/infra-validate.mjs",
     "predeploy": "npm run go-live-check",
     "deploy": "echo \"Wire to your platform deploy here; npm runs predeploy (go-live-check) first.\""
   },
