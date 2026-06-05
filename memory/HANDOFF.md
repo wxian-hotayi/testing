@@ -1,7 +1,7 @@
 # HANDOFF — vitalis-commerce
 
-_Last updated: 2026-06-05 · Multi-tenant SaaS transformation in progress
-(MT-1/2/3/4 + RBAC done; MT-5/6 remain) · gate green · committed checkpoint_
+_Last updated: 2026-06-05 · Multi-tenant SaaS transformation COMPLETE
+(MT-1…MT-6 + RBAC) · gate green · committed & pushed · runtime validation pending_
 
 Production-grade **supplement e-commerce** platform (Malaysia / MYR), now being
 converted into a **multi-tenant SaaS** (many merchant stores on one codebase).
@@ -42,11 +42,12 @@ abandoned-cart cron, Resend emails); admin (BI, CRUD, orders, reviews); analytic
 
 ## In Progress / Next
 
-- **MT-5 — Stripe Connect** (per-store payout accounts; `stores.stripe_account_id`
-  / `stripe_charges_enabled` already exist).
-- **MT-6 — storefront subdomain routing** (resolve store per Host in storefront
-  pages, drop the default-store fallback, per-store branding; catalog queries are
-  already `storeId`-capable). Decide SSG-vs-dynamic per store here.
+- Nothing mid-edit — the MT-1…MT-6 + RBAC roadmap is feature-complete and the
+  gate is green. **MT-5** (Stripe Connect, destination charges + platform fee)
+  and **MT-6** (per-store storefront routing + branding, storefront now dynamic)
+  landed this session.
+- The remaining work is **runtime validation** (no live Postgres/Stripe here) —
+  see [docs/SETUP_AND_VALIDATION.md](../docs/SETUP_AND_VALIDATION.md).
 
 ## Issues / Blockers / Gotchas
 
@@ -90,10 +91,12 @@ abandoned-cart cron, Resend emails); admin (BI, CRUD, orders, reviews); analytic
 
 ## Next Actions
 
-1. Apply migrations to a live Supabase + `npm run db:types`; smoke-test RLS and
-   the member/role flows on real data.
-2. Build **MT-5** (Stripe Connect) and **MT-6** (subdomain storefront routing).
-3. Add E2E for invite→accept→role-change and store-creation flows.
+1. **Runtime validation** — follow [docs/SETUP_AND_VALIDATION.md](../docs/SETUP_AND_VALIDATION.md):
+   apply migrations to a live Supabase + `npm run db:types`, then exercise the
+   MT-1…MT-6 + RBAC + Stripe Connect (test mode) flows end-to-end.
+2. Add E2E for invite→accept→role-change, store-creation, and subdomain routing.
+3. Optional MT follow-ups (deferred, see docs): SSG-per-store, custom-domain
+   verification, per-store currency formatting, direct-charge Connect mode.
 
 ## Resume command
 
