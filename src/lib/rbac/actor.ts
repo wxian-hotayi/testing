@@ -2,7 +2,8 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getCurrentStoreId } from '@/lib/tenant/context';
+import { getCurrentStore } from '@/lib/tenant/context';
+import { DEFAULT_STORE_SLUG } from '@/lib/tenant/resolve';
 import {
   resolveRoleKey,
   permissionsForRole,
@@ -44,7 +45,11 @@ export async function getCurrentActor(): Promise<Actor | null> {
 
   // Membership in the current store (per the resolved tenant) determines the
   // departmental role. RLS lets a user read their own store_members rows.
-  const storeId = await getCurrentStoreId();
+  const store = await getCurrentStore();
+  const storeId = store?.id ?? null;
+  // The legacy global-role fallback only applies in the default/single-store
+  // context — never on a specific tenant store (prevents cross-tenant admin).
+  const isDefaultStore = !store || store.slug === DEFAULT_STORE_SLUG;
   let storeRole: Enums<'store_member_role'> | null = null;
   if (storeId) {
     const { data: member } = await supabase
@@ -60,6 +65,7 @@ export async function getCurrentActor(): Promise<Actor | null> {
     isPlatformAdmin,
     storeRole,
     profileRole: profile?.role ?? null,
+    isDefaultStore,
   });
 
   return {

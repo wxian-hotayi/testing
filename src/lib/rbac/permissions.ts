@@ -157,18 +157,26 @@ function mapStoreRole(role: StoreMemberRole): RoleKey {
 /**
  * Resolve the effective RoleKey for a user in the current store.
  *
- * Precedence: platform admin → store membership → legacy global `profiles.role`
- * (the last keeps existing admins/staff working for the default store until
- * `store_members` are populated in MT-4 member management).
+ * Precedence: platform admin → store membership → legacy global `profiles.role`.
+ *
+ * The legacy global-role fallback (`profiles.role` of admin/staff) ONLY applies
+ * in the default / single-store context (`isDefaultStore`). On a specific tenant
+ * store, a global role must NOT leak access — otherwise any user with the legacy
+ * `profiles.role='admin'` would be admin of EVERY store. `isDefaultStore` is also
+ * true when no store is resolved (pre-tenancy), preserving the original
+ * single-store app's behaviour.
  */
 export function resolveRoleKey(args: {
   isPlatformAdmin: boolean;
   storeRole: StoreMemberRole | null;
   profileRole: UserRole | null;
+  isDefaultStore: boolean;
 }): RoleKey {
   if (args.isPlatformAdmin) return 'super_admin';
   if (args.storeRole) return mapStoreRole(args.storeRole);
-  if (args.profileRole === 'admin') return 'admin';
-  if (args.profileRole === 'staff') return 'manager';
+  if (args.isDefaultStore) {
+    if (args.profileRole === 'admin') return 'admin';
+    if (args.profileRole === 'staff') return 'manager';
+  }
   return 'customer';
 }

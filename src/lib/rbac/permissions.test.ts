@@ -54,31 +54,31 @@ describe('permission matrix', () => {
 describe('resolveRoleKey', () => {
   it('platform admin → super_admin (regardless of other roles)', () => {
     expect(
-      resolveRoleKey({ isPlatformAdmin: true, storeRole: 'support', profileRole: 'customer' }),
+      resolveRoleKey({ isPlatformAdmin: true, storeRole: 'support', profileRole: 'customer', isDefaultStore: false }),
     ).toBe('super_admin');
   });
 
   it('store membership wins over legacy profile role', () => {
     expect(
-      resolveRoleKey({ isPlatformAdmin: false, storeRole: 'marketing', profileRole: 'customer' }),
+      resolveRoleKey({ isPlatformAdmin: false, storeRole: 'marketing', profileRole: 'customer', isDefaultStore: false }),
     ).toBe('marketing');
     expect(
-      resolveRoleKey({ isPlatformAdmin: false, storeRole: 'owner', profileRole: 'customer' }),
+      resolveRoleKey({ isPlatformAdmin: false, storeRole: 'owner', profileRole: 'customer', isDefaultStore: false }),
     ).toBe('admin');
   });
 
   it('legacy fallback: global admin/staff map to admin/manager for the default store', () => {
     expect(
-      resolveRoleKey({ isPlatformAdmin: false, storeRole: null, profileRole: 'admin' }),
+      resolveRoleKey({ isPlatformAdmin: false, storeRole: null, profileRole: 'admin', isDefaultStore: true }),
     ).toBe('admin');
     expect(
-      resolveRoleKey({ isPlatformAdmin: false, storeRole: null, profileRole: 'staff' }),
+      resolveRoleKey({ isPlatformAdmin: false, storeRole: null, profileRole: 'staff', isDefaultStore: true }),
     ).toBe('manager');
   });
 
   it('shoppers resolve to customer', () => {
     expect(
-      resolveRoleKey({ isPlatformAdmin: false, storeRole: null, profileRole: 'customer' }),
+      resolveRoleKey({ isPlatformAdmin: false, storeRole: null, profileRole: 'customer', isDefaultStore: true }),
     ).toBe('customer');
   });
 });
