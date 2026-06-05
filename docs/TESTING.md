@@ -72,9 +72,64 @@ Self-skip until their prerequisites are provided (mirrors the purchase path):
   store; invite a member. Env: `E2E_EMAIL`, `E2E_PASSWORD` (a real Supabase
   account; the invite test also needs `members.manage` and self-skips otherwise).
 
+Multi-store coverage (Store Isolation + RBAC + Invite loop) — self-skip unless
+the fixtures below exist:
+- `tests/e2e/rbac.spec.ts` — per-role admin-nav visibility + gated-page
+  redirects (admin/manager/marketing/warehouse/support).
+- `tests/e2e/store-isolation.spec.ts` — a store-A admin cannot reach or query
+  store B's admin surface (UI redirect + API 401/403).
+- `tests/e2e/invite-flow.spec.ts` — admin invites → invitee accepts → gains
+  access (two browser contexts).
+
 **Validation:** `npx playwright test --list` confirms all specs compile/collect
-(17 tests) without a browser. Full execution needs `npx playwright install
-chromium` + a running app (+ the env vars above for the gated specs).
+without a browser. Full execution needs `npx playwright install chromium` + a
+running app (+ the env vars / fixtures below for the gated specs).
+
+### Multi-store E2E setup (real environment)
+
+These specs target a live, seeded environment (no live DB/Stripe/browser exists
+in CI-less local analysis — run them where Supabase is reachable).
+
+1. **Env** (`.env.local` or shell):
+   ```bash
+   E2E_ROOT_DOMAIN=localhost:3000        # platform root (Chrome resolves *.localhost)
+   E2E_STORE_A_SLUG=store-a
+   E2E_STORE_B_SLUG=store-b
+   E2E_ADMIN_EMAIL=... E2E_ADMIN_PASSWORD=...        # owner/admin of store A only
+   E2E_MANAGER_EMAIL=... E2E_MANAGER_PASSWORD=...    # (optional, per role)
+   E2E_MARKETING_EMAIL=... E2E_MARKETING_PASSWORD=...
+   E2E_WAREHOUSE_EMAIL=... E2E_WAREHOUSE_PASSWORD=...
+   E2E_SUPPORT_EMAIL=... E2E_SUPPORT_PASSWORD=...
+   E2E_INVITEE_EMAIL=... E2E_INVITEE_PASSWORD=...    # 2nd account, not yet in store A
+   ```
+2. **Accounts:** sign each up (app `/login` → create account, or Supabase
+   dashboard). Create stores `store-a` and `store-b` via `/account/stores/new`.
+3. **Seed store-A roles** (Supabase SQL editor). ⚠️ Clear the legacy global role
+   first so the `profiles.role='admin'` fallback doesn't grant cross-store admin
+   (see caveat below):
+   ```sql
+   update public.profiles set role = 'customer'
+   where email in ('ADMIN','MANAGER','MARKETING','WAREHOUSE','SUPPORT','INVITEE');
+
+   insert into public.store_members (store_id, user_id, role, status)
+   select s.id, p.id, v.role::store_member_role, 'active'
+   from (values
+     ('ADMIN','owner'), ('MANAGER','manager'), ('MARKETING','marketing'),
+     ('WAREHOUSE','warehouse'), ('SUPPORT','support')
+   ) as v(email, role)
+   join public.profiles p on p.email = v.email
+   join public.stores  s on s.slug   = 'store-a'
+   on conflict (store_id, user_id) do update
+     set role = excluded.role, status = 'active';
+   ```
+4. **Run:** `npm run build && npm run test:e2e`.
+
+> **Legacy-fallback caveat (known finding):** `resolveRoleKey` treats a global
+> `profiles.role='admin'` as admin of *any* store visited (intended only as a
+> transition for the default store). So isolation/RBAC test accounts must use
+> **store-membership** roles with `profiles.role='customer'`, not the global
+> admin role. Recommend restricting that fallback to the default store before
+> launch.
 
 ### Still recommended before launch
 - A dedicated Stripe payment test (drive the hosted page with test cards).
