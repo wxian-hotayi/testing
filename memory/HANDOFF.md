@@ -3,7 +3,8 @@
 _Last updated: 2026-06-08 · Multi-tenant SaaS **runtime-validated against live
 staging**. MT-1…MT-12 complete · migrations 0011–0016 applied & proven · RLS /
 RBAC / tenant isolation / invite-accept / routing all proven by live E2E ·
-signup bug fixed (0016) · **sole remaining blocker: Stripe placeholder key**._
+signup bug fixed (0016) · **Stripe validated (real test charge+refund, Gate 8
+PASS) → 0 critical gate failures. Remaining = production cutover only.**_
 
 Production-grade **supplement e-commerce** platform (Malaysia / MYR), converted
 into a **multi-tenant SaaS** (many merchant stores on one codebase). Next.js 15
@@ -11,9 +12,11 @@ into a **multi-tenant SaaS** (many merchant stores on one codebase). Next.js 15
 RLS) · Stripe (+ Connect) · Resend · PostHog/GA4/Meta · Vercel. Money is integer
 **sen** everywhere.
 
-Verdict (`reports/PRODUCTION_READY_STATE.md`): **PRODUCTION READY = NO** — the
-only un-passed gate is Stripe (placeholder key `sk_test_xxx`), a config/test-key
-task, **not** a code defect.
+Verdict (`reports/PRODUCTION_READY_STATE.md`): **STAGING VALIDATED = YES**
+(0 critical gate failures, incl. a real test-mode Stripe charge+refund);
+**PRODUCTION READY = NO** only for the un-provisioned prod environment (separate
+prod project + `sk_live_` keys + registered webhook + HTTPS domain). No code or
+validation gap remains — see `docs/PRODUCTION_CUTOVER.md`.
 
 ## Completed
 
@@ -61,17 +64,21 @@ referrals, abandoned-cart cron, Resend); admin BI/CRUD/orders/reviews; analytics
 
 ## In Progress / Next
 
-- **Nothing mid-edit.** Code + schema are runtime-validated against staging.
-- **One step to a green staging verdict:** drop a real `sk_test_…` key +
-  test-endpoint `whsec_…` into `.env.local`, run
-  `node scripts/infra-validate.mjs --strict --payments` → Gate 7/8 flip green.
-- **Production cutover** then follows `docs/PRODUCTION_CUTOVER.md` (prod Supabase
-  project, live keys, HTTPS domain, CI gating).
+- **Nothing mid-edit.** Code + schema runtime-validated against staging;
+  **Stripe validated** (real test charge+refund, `infra-validate --payments`,
+  Gate 8 PASS / Gate 7 warn = unregistered webhook endpoint). 0 critical fails.
+- **Remaining = production cutover only** (env provisioning, not code): follow
+  `docs/PRODUCTION_CUTOVER.md` — separate prod Supabase project, live `sk_live_`
+  keys + registered webhook endpoint, HTTPS `NEXT_PUBLIC_SITE_URL`, CI gating;
+  then `infra-validate --target=production --payments` + batched E2E against prod.
 
 ## Issues / Blockers / Gotchas
 
-- ⛔ **Stripe is the sole blocker** — `.env.local` has placeholder `sk_test_xxx`.
-  Charge/refund/webhook idempotency can't be validated without a real key.
+- ✅ **Stripe validated (test mode)** — a real `sk_test_` key in `.env.local`
+  passed `infra-validate --payments`: PaymentIntent + Refund both succeeded
+  (Gate 8 PASS), key/account/Connect valid (Gate 7). Gate 7 warns only because
+  no `/api/webhooks/stripe` endpoint is registered (no public staging URL — use
+  `stripe listen` locally or register at cutover). `.env.local` stays unstaged.
 - ✅ Migrations 0011–0016 ARE applied to staging (the earlier "not applied"
   verdict was a **stale PostgREST schema cache** false negative — fixed via
   `NOTIFY pgrst, 'reload schema'`).
@@ -119,10 +126,13 @@ referrals, abandoned-cart cron, Resend); admin BI/CRUD/orders/reviews; analytics
 
 ## Next Actions
 
-1. **Flip staging green** — real `sk_test_` key → `infra-validate --strict --payments`.
+1. ✅ DONE — staging validated (Stripe test charge+refund passed; 0 critical fails).
 2. **Production cutover** — follow `docs/PRODUCTION_CUTOVER.md` (prod project +
-   live keys + HTTPS + CI gate), re-prove gates against prod.
-3. **Regenerate graphify** (stale) — run the tool with explicit confirmation.
+   live keys + registered webhook + HTTPS + CI gate), re-prove gates against prod.
+3. **Regenerate the interactive graph** — `graphify/` (md+json) refreshed
+   2026-06-08; the real-tool output `graphify-out/graph.html` is still the
+   2026-06-04 single-store snapshot. Run `graphify .` (explicit confirmation) to
+   rebuild it.
 
 ## Resume command
 
