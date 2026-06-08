@@ -38,9 +38,13 @@ test.describe('invite → accept (MT-4)', () => {
       expect(pathOf(inviter), 'admin reaches members page').toBe('/admin/members');
 
       await inviter.getByLabel('Invite by email').fill(inviteeEmail);
-      await inviter.getByLabel('Role').selectOption('support');
+      // Scope to the invite form's role select — the members table also renders a
+      // "Filter by role" select and a per-member "Role for <email>" select.
+      await inviter.getByLabel('Role', { exact: true }).selectOption('support');
       await inviter.getByRole('button', { name: /send invite/i }).click();
-      await expect(inviter.getByText(inviteeEmail)).toBeVisible({ timeout: 15_000 });
+      // The success banner is unique; the email also appears in the members table
+      // and the success text, so assert on the banner specifically.
+      await expect(inviter.getByText(/invitation sent to/i)).toBeVisible({ timeout: 15_000 });
 
       // 2) Invitee logs in and accepts.
       const invitee = await inviteeCtx.newPage();
@@ -50,7 +54,10 @@ test.describe('invite → accept (MT-4)', () => {
         timeout: 15_000,
       });
       await invitee.getByRole('button', { name: /^accept$/i }).first().click();
-      await expect(invitee.getByText(/accepted/i)).toBeVisible({ timeout: 15_000 });
+      // On success the action refreshes the page; the accepted invite drops out
+      // of the list and the success banner is unmounted (transient). The durable
+      // post-state is the empty list — assert that, then prove the access gain.
+      await expect(invitee.getByText(/no pending invitations/i)).toBeVisible({ timeout: 15_000 });
 
       // 3) Invitee is now a store-A operator → reaches /admin (was redirected before).
       await invitee.goto(`${origin}/admin`);

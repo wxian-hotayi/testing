@@ -41,7 +41,10 @@ test.describe('store isolation (A cannot reach B)', () => {
 
     // The API resolves the store from the request Host. Called against B's
     // origin, an A-only admin must be rejected (not a member of B).
-    const res = await page.request.get(`${storeOrigin(TENANCY.storeB)}/api/admin/members`);
-    expect([401, 403], `status was ${res.status()}`).toContain(res.status());
+    // Probe via browser navigation rather than the Node request context: the
+    // latter's getaddrinfo can't resolve *.localhost on all platforms, while
+    // Chromium can — and the page carries the same store-A session cookies.
+    const res = await page.goto(`${storeOrigin(TENANCY.storeB)}/api/admin/members`);
+    expect([401, 403], `status was ${res?.status()}`).toContain(res?.status() ?? 0);
   });
 });
